@@ -51,6 +51,7 @@ public class FinancialStatement
             FleetMaintenanceExpense = FleetMaintenanceExpense,
             RoadConstructionExpense = RoadConstructionExpense,
             RoadMaintenanceExpense = RoadMaintenanceExpense,
+            RivalTollExpense = RivalTollExpense,
             LoanInterestExpense = LoanInterestExpense,
             InfrastructureAndFleetExpense = InfrastructureAndFleetExpense,
             ClosingBalance = balance,
@@ -68,6 +69,7 @@ public class FinancialStatement
         FleetMaintenanceExpense = 0;
         RoadConstructionExpense = 0;
         RoadMaintenanceExpense = 0;
+        RivalTollExpense = 0;
         LoanInterestExpense = 0;
         InfrastructureAndFleetExpense = 0;
     }
@@ -124,6 +126,13 @@ public class FinancialLedger
         Lifetime.RoadMaintenanceExpense += amount;
     }
 
+    public void RecordRivalTollExpense(long amount)
+    {
+        if (amount <= 0) return;
+        CurrentMonth.RivalTollExpense += amount;
+        Lifetime.RivalTollExpense += amount;
+    }
+
     public void RecordFleetMaintenance(long amount)
     {
         if (amount <= 0) return;
@@ -178,6 +187,7 @@ public class FinancialLedger
         target.FleetMaintenanceExpense = source.FleetMaintenanceExpense;
         target.RoadConstructionExpense = source.RoadConstructionExpense;
         target.RoadMaintenanceExpense = source.RoadMaintenanceExpense;
+        target.RivalTollExpense = source.RivalTollExpense;
         target.LoanInterestExpense = source.LoanInterestExpense;
         target.InfrastructureAndFleetExpense = source.InfrastructureAndFleetExpense;
         target.ClosingBalance = source.ClosingBalance;

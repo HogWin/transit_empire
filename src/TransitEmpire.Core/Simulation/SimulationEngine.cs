@@ -190,6 +190,9 @@ public class SimulationEngine
     public event Action<Truck, Truck, string>? OnTruckAutoReplaced;
     public event Action<BusTerminal>? OnBusTerminalBuilt;
     public event Action<Truck, BusTerminal, int, long>? OnPassengersDelivered;
+    public event Action<LogisticsContract, string>? OnContractAuctionWon;
+    public event Action<RivalCompany, List<RoadEdge>, long>? OnRivalRoadBuilt;
+    public event Action<Truck, RivalCompany, long>? OnRivalTollPaid;
 
     public List<OperationalBottleneck> DiagnoseBottlenecks() => OperationalDiagnostics.Analyze(this);
 
@@ -224,6 +227,7 @@ public class SimulationEngine
     {
         World = world;
         SyncAllEdgeBiomes();
+        RefreshUrbanTrafficPenalties();
         RecomputeNextIds();
         if (generateInitialContracts)
         {
@@ -269,6 +273,7 @@ public class SimulationEngine
         PlayerContractsCompleted = playerContractsCompleted;
         EnsureRivalsInitialized();
         SyncAllEdgeBiomes();
+        RefreshUrbanTrafficPenalties();
         RecomputeNextIds();
     }
 
@@ -301,6 +306,100 @@ public class SimulationEngine
         );
         ActiveContracts.Add(contract);
         return contract;
+    }
+
+    /// <summary>
+    /// Abre um leilão de tarifa/prazo para contrato exclusivo disputado entre o jogador e transportadoras rivais.
+    /// </summary>
+    public LogisticsContract CreateExclusiveAuctionContract(
+        City city,
+        ResourceType resource = ResourceType.Steel,
+        int amount = 50,
+        float baseDurationHours = 180f,
+        float auctionHours = 24f)
+    {
+        EnsureRivalsInitialized();
+        long bonusMoney = (long)Math.Round(amount * 48L);
+        int bonusXp = amount * 16;
+        var contract = new LogisticsContract(
+            _nextContractId++,
+            $"🏷️ Leilão Exclusivo: {resource} → {city.Name}",
+            city,
+            resource,
+            amount,
+            bonusMoney,
+            bonusXp,
+            durationHours: baseDurationHours)
+        {
+            IsExclusiveAuction = true,
+            AuctionRemainingHours = auctionHours
+        };
+
+        var leadingRival = Rivals.Count > 0 ? Rivals[_rng.Next(Rivals.Count)] : new RivalCompany(1, "TransBrasil Express", "#f97316");
+        float rivalTariff = 0.90f + (float)_rng.NextDouble() * 0.08f; // 0.90x .. 0.98x
+        float rivalDuration = MathF.Round(baseDurationHours * (0.85f + (float)_rng.NextDouble() * 0.12f));
+        contract.SubmitRivalBid(leadingRival.Name, rivalTariff, rivalDuration);
+
+        ActiveContracts.Add(contract);
+        return contract;
+    }
+
+    /// <summary>
+    /// Registra o lance do jogador (multiplicador de tarifa de frete e prazo em horas) em um leilão ativo.
+    /// </summary>
+    public bool PlacePlayerAuctionBid(int contractId, float bidFreightMultiplier, float bidDurationHours, out string statusMessage)
+    {
+        var contract = ActiveContracts.FirstOrDefault(c => c.Id == contractId);
+        if (contract == null || !contract.IsExclusiveAuction)
+        {
+            statusMessage = "⚠️ Contrato em leilão não encontrado.";
+            return false;
+        }
+        if (!contract.IsAuctionOpen)
+        {
+            statusMessage = "⚠️ Este leilão já foi encerrado.";
+            return false;
+        }
+
+        contract.SubmitPlayerBid(bidFreightMultiplier, bidDurationHours);
+        float playerScore = LogisticsContract.ComputeBidScore(contract.PlayerBidFreightMultiplier, contract.PlayerBidDurationHours, contract.BaseDurationHours);
+        float rivalScore = LogisticsContract.ComputeBidScore(contract.RivalBidFreightMultiplier, contract.RivalBidDurationHours, contract.BaseDurationHours);
+        string statusLead = playerScore >= rivalScore
+            ? "✅ Na liderança do leilão!"
+            : $"⚠️ Rival ({contract.RivalBidCompanyName}) ainda à frente — reduza tarifa ou prazo.";
+        statusMessage = $"📢 Lance enviado: Tarifa {contract.PlayerBidFreightMultiplier * 100f:F0}% | Prazo {contract.PlayerBidDurationHours:F0}h. {statusLead}";
+        return true;
+    }
+
+    public bool ResolveContractAuction(LogisticsContract contract)
+    {
+        if (!contract.IsExclusiveAuction || contract.IsWonByPlayerAuction || contract.IsLostToRival || contract.IsCompleted)
+            return false;
+
+        EnsureRivalsInitialized();
+        bool playerWins = false;
+        if (contract.HasPlayerBid)
+        {
+            float playerScore = LogisticsContract.ComputeBidScore(contract.PlayerBidFreightMultiplier, contract.PlayerBidDurationHours, contract.BaseDurationHours);
+            float rivalScore = LogisticsContract.ComputeBidScore(contract.RivalBidFreightMultiplier, contract.RivalBidDurationHours, contract.BaseDurationHours);
+            playerWins = playerScore >= rivalScore;
+        }
+
+        if (playerWins)
+        {
+            contract.ApplyWonPlayerAuctionTerms();
+            OnContractAuctionWon?.Invoke(contract, Player.CompanyName);
+            return true;
+        }
+
+        var winningRival = Rivals.FirstOrDefault(r => r.Name == contract.RivalBidCompanyName) ?? Rivals.FirstOrDefault();
+        if (winningRival != null)
+        {
+            winningRival.AuctionsWon++;
+            ClaimContractForRival(contract, winningRival);
+            OnContractAuctionWon?.Invoke(contract, winningRival.Name);
+        }
+        return false;
     }
 
     /// <summary>
@@ -946,6 +1045,12 @@ public class SimulationEngine
             return false;
         }
 
+        if (cell.RivalOwnerId > 0)
+        {
+            message = "🏢 Trecho privado de transportadora rival não pode ser demolido — construa um desvio competitivo!";
+            return false;
+        }
+
         RoadStructureType removedStructure = cell.StructureType;
         long invested = removedStructure.GetBaseConstructionCost();
         if (cell.RoadLevel > RoadTier.Dirt)
@@ -1153,9 +1258,14 @@ public class SimulationEngine
         {
             line.HoursSinceLastDispatch = Math.Min(10_000f, line.HoursSinceLastDispatch + deltaHours);
         }
-        foreach (var contract in ActiveContracts)
+        foreach (var contract in ActiveContracts.ToList())
         {
+            bool wasAuctionOpen = contract.IsAuctionOpen;
             contract.AdvanceTime(deltaHours);
+            if (wasAuctionOpen && contract.AuctionRemainingHours <= 0f)
+            {
+                ResolveContractAuction(contract);
+            }
         }
         foreach (var seaport in World.Seaports)
         {
@@ -2017,9 +2127,18 @@ public class SimulationEngine
             c.TargetCity.Id == targetCity.Id &&
             c.Resource == deliveredType);
         float convoyMultiplier = convoyContract != null ? convoyContract.FreightMultiplier : 1.0f;
+        var wonAuctionContract = ActiveContracts.FirstOrDefault(c =>
+            c.IsExclusiveAuction &&
+            c.IsWonByPlayerAuction &&
+            !c.IsCompleted &&
+            !c.IsExpired &&
+            !c.IsLostToRival &&
+            c.TargetCity.Id == targetCity.Id &&
+            c.Resource == deliveredType);
+        float auctionMultiplier = wonAuctionContract != null ? wonAuctionContract.FreightMultiplier : 1.0f;
 
         long baseFreightReward = (long)(accepted * 18f * distanceFactor * scarcityMultiplier * hubMultiplier * manufacturedMultiplier * reeferMultiplier * Research.HeavyFreightBonusMultiplier);
-        long freightReward = (long)Math.Round(baseFreightReward * convoyMultiplier);
+        long freightReward = (long)Math.Round(baseFreightReward * convoyMultiplier * auctionMultiplier);
         int xpReward = accepted * (convoyContract != null ? 16 : 8);
 
         if (hasNearbyHub)
@@ -2083,6 +2202,11 @@ public class SimulationEngine
 
         bus.LoadedCargoAmount = 0;
         bus.LoadedCargoType = ResourceType.None;
+        if (bus.CurrentTripEdges.Count > 0)
+        {
+            CollectTollAndWeighBonusForTrip(bus);
+            bus.ClearCurrentTripEdges();
+        }
         OnPassengersDelivered?.Invoke(bus, terminal, passengers, ticketRevenue);
         return ticketRevenue;
     }
@@ -2247,14 +2371,21 @@ public class SimulationEngine
         if (candidates.Count > 0)
         {
             var choice = candidates[_rng.Next(candidates.Count)];
-            city.UrbanTiles.Add(choice);
+            int distToCenter = Math.Abs(choice.X - city.CenterX) + Math.Abs(choice.Y - city.CenterY);
+            bool touchesRoad = CountAdjacentRoadTiles(choice.X, choice.Y) > 0;
+            UrbanDistrictType district = (touchesRoad || distToCenter <= 2 || city.ResidentialTileCount >= Math.Max(4, city.CommercialTileCount * 2))
+                ? UrbanDistrictType.Commercial
+                : UrbanDistrictType.Residential;
+
+            city.SetUrbanTileDistrict(choice.X, choice.Y, district);
             World.Grid[choice.X, choice.Y].OccupantId = city.Id;
             World.Grid[choice.X, choice.Y].RoadLevel = RoadTier.None; // Novo quarteirão urbano NUNCA nasce sobre rodovia
 
-            city.Population += _rng.Next(30, 60);
+            city.Population += district == UrbanDistrictType.Residential ? _rng.Next(45, 75) : _rng.Next(25, 45);
             city.ExpansionLevel++;
 
             var (res, delta, isNewRes) = city.Warehouse.ExpandDemandForGrowth(city.ExpansionLevel, city.Population);
+            RefreshUrbanTrafficPenalties();
 
             OnCityExpanded?.Invoke(city, choice.X, choice.Y);
             OnDemandIncreased?.Invoke(city, res, delta, isNewRes);
@@ -2265,6 +2396,66 @@ public class SimulationEngine
                 TryUnlockNewRegion(out _);
             }
         }
+    }
+
+    public void RefreshUrbanTrafficPenalties()
+    {
+        bool anyChanged = false;
+        foreach (var edge in World.RoadEdges)
+        {
+            float worstMultiplier = 1.0f;
+            int midX = (edge.FromNode.GridX + edge.ToNode.GridX) / 2;
+            int midY = (edge.FromNode.GridY + edge.ToNode.GridY) / 2;
+
+            foreach (var city in World.Cities)
+            {
+                float cityMult = city.GetDowntownTrafficSpeedMultiplier();
+                if (cityMult >= 0.999f)
+                    continue;
+
+                int distFrom = Math.Abs(edge.FromNode.GridX - city.CenterX) + Math.Abs(edge.FromNode.GridY - city.CenterY);
+                int distTo = Math.Abs(edge.ToNode.GridX - city.CenterX) + Math.Abs(edge.ToNode.GridY - city.CenterY);
+                int distMid = Math.Abs(midX - city.CenterX) + Math.Abs(midY - city.CenterY);
+                int minDist = Math.Min(distMid, Math.Min(distFrom, distTo));
+
+                // Trechos centrais (até 2 tiles do centro) sofrem trânsito urbano pesado; anéis viários periféricos (>= 3) ficam livres!
+                if (minDist <= 2)
+                {
+                    worstMultiplier = Math.Min(worstMultiplier, cityMult);
+                }
+            }
+
+            if (Math.Abs(edge.UrbanTrafficSpeedMultiplier - worstMultiplier) > 0.001f)
+            {
+                edge.UrbanTrafficSpeedMultiplier = worstMultiplier;
+                anyChanged = true;
+            }
+        }
+
+        if (anyChanged)
+        {
+            Pathfinder.InvalidateCache();
+        }
+    }
+
+    public bool IsTileInCongestedDowntown(int x, int y, out City? congestedCity, out float speedFactor)
+    {
+        congestedCity = null;
+        speedFactor = 1.0f;
+        foreach (var city in World.Cities)
+        {
+            float mult = city.GetDowntownTrafficSpeedMultiplier();
+            if (mult >= 0.999f)
+                continue;
+
+            int dist = Math.Abs(x - city.CenterX) + Math.Abs(y - city.CenterY);
+            if (dist <= 2 && mult < speedFactor)
+            {
+                speedFactor = mult;
+                congestedCity = city;
+            }
+        }
+        return congestedCity != null;
     }
 
     public int GetNextRegionUnlockCost() => 12000 + Math.Max(0, World.UnlockedRegionsCount - 1) * 6000;
@@ -2507,6 +2698,7 @@ public class SimulationEngine
         }
 
         _nearestNodeCache.Clear();
+        RefreshUrbanTrafficPenalties();
         Pathfinder.InvalidateCache();
         EvaluateMilestones();
         return true;
@@ -2521,7 +2713,7 @@ public class SimulationEngine
             return false;
 
         ref var cell = ref World.Grid[x, y];
-        if (cell.RoadLevel == RoadTier.None || cell.RoadLevel >= targetTier)
+        if (cell.RoadLevel == RoadTier.None || cell.RoadLevel >= targetTier || cell.RivalOwnerId > 0)
             return false;
 
         // Validação de nível do jogador e árvore de pesquisa
@@ -4062,6 +4254,4 @@ public readonly record struct IndustrialConnections(
     bool HeavyBridgeE,
     bool HeavyBridgeW,
     int RoadDockCount,
-    int FacilityBridgeCount,
-    int NearbyHubCount,
-    int DailyProductionBonus);
+    int FacilityBri
