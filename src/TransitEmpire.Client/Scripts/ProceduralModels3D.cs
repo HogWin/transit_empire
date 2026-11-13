@@ -1254,7 +1254,11 @@ public static partial class ProceduralModels3D
         bool IsBlockedByLandslide,
         int RivalOwnerId = 0,
         string? RivalColorHex = null,
-        bool IsDowntownCongested = false);
+        bool IsDowntownCongested = false,
+        bool DockN = false,
+        bool DockS = false,
+        bool DockE = false,
+        bool DockW = false);
 
     private sealed class RoadChunkSurfaceCollector
     {
@@ -1507,6 +1511,14 @@ public static partial class ProceduralModels3D
         bool connectS = tile.ConnectS;
         bool connectE = tile.ConnectE;
         bool connectW = tile.ConnectW;
+        bool dockN = tile.DockN && !connectN;
+        bool dockS = tile.DockS && !connectS;
+        bool dockE = tile.DockE && !connectE;
+        bool dockW = tile.DockW && !connectW;
+        bool openN = connectN || dockN;
+        bool openS = connectS || dockS;
+        bool openE = connectE || dockE;
+        bool openW = connectW || dockW;
         int gridX = tile.GridX;
         int gridY = tile.GridY;
         RoadStructureType structure = tile.Structure;
@@ -1559,6 +1571,47 @@ public static partial class ProceduralModels3D
         if (connectS) collector.AddRoadbedBox(tier, new Vector3(width, 0.06f, halfArm), o + new Vector3(0, 0.03f, offset));
         if (connectE) collector.AddRoadbedBox(tier, new Vector3(halfArm, 0.06f, width), o + new Vector3(offset, 0.03f, 0));
         if (connectW) collector.AddRoadbedBox(tier, new Vector3(halfArm, 0.06f, width), o + new Vector3(-offset, 0.03f, 0));
+
+        // Acesso integrado de carga/embarque quando adjacente a Indústrias, Portos, Garagens, Hubs e Terminais
+        if (dockN || dockS || dockE || dockW)
+        {
+            var yardApronCol = new Color("cbd5e1");
+            var dockGateCol = new Color("f59e0b");
+            float apronWidth = MathF.Min(width, 1.18f);
+            float innerStart = width * 0.5f - 0.04f;
+            float dockReach = TileSize * 0.5f + 0.14f;
+            float dockArmLen = dockReach - innerStart;
+            float dockOffset = (innerStart + dockReach) * 0.5f;
+            float shoulderSpan = 0.40f;
+            float shoulderCenter = 0.96f;
+            float shoulderW = MathF.Min(TileSize - 0.16f, apronWidth + 0.36f);
+
+            void EmitFacilityDockApron(int dx, int dz)
+            {
+                bool vertical = dz != 0;
+                float dir = vertical ? dz : dx;
+                Vector3 armSize = vertical ? new Vector3(apronWidth, 0.061f, dockArmLen) : new Vector3(dockArmLen, 0.061f, apronWidth);
+                Vector3 armPos = o + (vertical ? new Vector3(0f, 0.0305f, dir * dockOffset) : new Vector3(dir * dockOffset, 0.0305f, 0f));
+                collector.AddRoadbedBox(tier, armSize, armPos);
+
+                // Base de concreto nivelada ligando a via ao pátio industrial sem frestas
+                Vector3 shSize = vertical ? new Vector3(shoulderW, 0.056f, shoulderSpan) : new Vector3(shoulderSpan, 0.056f, shoulderW);
+                Vector3 shPos = o + (vertical ? new Vector3(0f, 0.0285f, dir * shoulderCenter) : new Vector3(dir * shoulderCenter, 0.0285f, 0f));
+                collector.AddFlatColorBox(shSize, shPos, yardApronCol);
+
+                if (tier >= RoadTier.Asphalt)
+                {
+                    Vector3 gateSize = vertical ? new Vector3(apronWidth * 0.84f, 0.064f, 0.07f) : new Vector3(0.07f, 0.064f, apronWidth * 0.84f);
+                    Vector3 gatePos = o + (vertical ? new Vector3(0f, 0.035f, dir * 0.94f) : new Vector3(dir * 0.94f, 0.035f, 0f));
+                    collector.AddFlatColorBox(gateSize, gatePos, dockGateCol);
+                }
+            }
+
+            if (dockN) EmitFacilityDockApron(0, -1);
+            if (dockS) EmitFacilityDockApron(0, 1);
+            if (dockE) EmitFacilityDockApron(1, 0);
+            if (dockW) EmitFacilityDockApron(-1, 0);
+        }
 
         // Chanfros suaves nos cantos internos de curvas de 90° (L-curves) e cruzamentos
         float chamferPos = width * 0.44f;
@@ -1619,13 +1672,13 @@ public static partial class ProceduralModels3D
         {
             var guardRailCol = new Color("94a3b8");
             float grOff = width * 0.5f + 0.08f;
-            if (!connectN && (connectE || connectW))
+            if (!openN && (openE || openW))
                 collector.AddFlatColorBox(new Vector3(TileSize * 0.88f, 0.12f, 0.05f), o + new Vector3(0, 0.09f, -grOff), guardRailCol);
-            if (!connectS && (connectE || connectW))
+            if (!openS && (openE || openW))
                 collector.AddFlatColorBox(new Vector3(TileSize * 0.88f, 0.12f, 0.05f), o + new Vector3(0, 0.09f, grOff), guardRailCol);
-            if (!connectW && (connectN || connectS))
+            if (!openW && (openN || openS))
                 collector.AddFlatColorBox(new Vector3(0.05f, 0.12f, TileSize * 0.88f), o + new Vector3(-grOff, 0.09f, 0), guardRailCol);
-            if (!connectE && (connectN || connectS))
+            if (!openE && (openN || openS))
                 collector.AddFlatColorBox(new Vector3(0.05f, 0.12f, TileSize * 0.88f), o + new Vector3(grOff, 0.09f, 0), guardRailCol);
         }
 
@@ -1671,22 +1724,22 @@ public static partial class ProceduralModels3D
         {
             var rivalCol = new Color(string.IsNullOrWhiteSpace(rivalColorHex) ? "f97316" : rivalColorHex.TrimStart('#'));
             float rOff = width * 0.5f + 0.07f;
-            if (!connectN && (connectE || connectW))
+            if (!openN && (openE || openW))
                 collector.AddFlatColorBox(new Vector3(TileSize * 0.84f, 0.09f, 0.08f), o + new Vector3(0, 0.065f, -rOff), rivalCol);
-            if (!connectS && (connectE || connectW))
+            if (!openS && (openE || openW))
                 collector.AddFlatColorBox(new Vector3(TileSize * 0.84f, 0.09f, 0.08f), o + new Vector3(0, 0.065f, rOff), rivalCol);
-            if (!connectW && (connectN || connectS))
+            if (!openW && (openN || openS))
                 collector.AddFlatColorBox(new Vector3(0.08f, 0.09f, TileSize * 0.84f), o + new Vector3(-rOff, 0.065f, 0), rivalCol);
-            if (!connectE && (connectN || connectS))
+            if (!openE && (openN || openS))
                 collector.AddFlatColorBox(new Vector3(0.08f, 0.09f, TileSize * 0.84f), o + new Vector3(rOff, 0.065f, 0), rivalCol);
         }
         else if (isDowntownCongested)
         {
             var amberCol = new Color("f59e0b");
             float cOff = width * 0.5f + 0.05f;
-            if (!connectN && (connectE || connectW))
+            if (!openN && (openE || openW))
                 collector.AddFlatColorBox(new Vector3(0.35f, 0.055f, 0.06f), o + new Vector3(0, 0.048f, -cOff), amberCol);
-            if (!connectW && (connectN || connectS))
+            if (!openW && (openN || openS))
                 collector.AddFlatColorBox(new Vector3(0.06f, 0.055f, 0.35f), o + new Vector3(-cOff, 0.048f, 0), amberCol);
         }
 

@@ -274,6 +274,7 @@ public partial class MainView
                 if (created != null)
                 {
                     SpawnIntermodalYardVisual(created);
+                    RebuildRoadAndNeighbors(created.GridX, created.GridY);
                     SpawnConstructionBurst(GridToWorld(gx, gy));
                     RebuildSchedulePools();
                     RefreshRailTabSelectors();
@@ -300,6 +301,7 @@ public partial class MainView
         {
             if (IsInstanceValid(yNode)) yNode.QueueFree();
             _intermodalYardNodes.Remove(demResult.RemovedEntityId);
+            RebuildRoadAndNeighbors(gx, gy);
             RebuildSchedulePools();
             RefreshRailTabSelectors();
         }

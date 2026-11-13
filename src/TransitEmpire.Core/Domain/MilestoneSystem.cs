@@ -136,7 +136,8 @@ public class MilestoneTracker
 
         int total = urbanEdges.Count;
         int paved = urbanEdges.Count(e => e.Tier >= RoadTier.Asphalt);
-        bool qualified = total >= 2 && paved == total;
+        // Cada ligação viária bidirecional gera 2 arestas direcionadas; exige ao menos 2 ligações distintas (>= 4 arestas)
+        bool qualified = total >= 4 && paved == total;
         return (paved, total, qualified);
     }
 

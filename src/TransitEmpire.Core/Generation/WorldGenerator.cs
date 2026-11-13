@@ -116,7 +116,8 @@ public class WorldGenerator
         // 5. Terminais Portuários conectados ao Oceano ligando continentes distintos + Mega-Obras lógicas
         if (world.Grid.GetLength(0) >= 25 && world.Grid.GetLength(1) >= 25)
         {
-            GenerateSeaports(world);
+            if (_config.HasRivers)
+                GenerateSeaports(world);
             GenerateRegionalLandmarks(world);
         }
 
@@ -130,7 +131,8 @@ public class WorldGenerator
     {
         int w = _config.Width;
         int h = _config.Height;
-        bool hasOceanChannel = w >= 65 && h >= 65;
+        bool isLargeMap = w >= 65 && h >= 65;
+        bool hasOceanChannel = _config.HasRivers && isLargeMap;
         bool isArchipelago = _config.Scenario == WorldScenario.CoastalArchipelago;
         bool isAlpine = _config.Scenario == WorldScenario.AlpineRange;
 
@@ -139,137 +141,116 @@ public class WorldGenerator
         float phaseC = (float)_rng.NextDouble() * MathF.Tau;
 
         // A. Canal Oceânico navegável dividindo Continente Principal (Oeste) e Continente Ultramarino (Leste)
-        if (hasOceanChannel)
+        // Quando HasRivers=false, gera um continente único contínuo sem mar divisório nem portos.
+        if (_config.HasRivers)
         {
-            float baseSeaX = w * ((isArchipelago ? 0.56f : 0.61f) + (float)_rng.NextDouble() * 0.05f);
-            float seaWidthScale = isArchipelago ? 1.45f : (isAlpine ? 0.85f : 1.0f);
-            for (int y = 0; y < h; y++)
+            if (hasOceanChannel)
             {
-                float ny = (float)y / Math.Max(1, h - 1);
-                float seaCenter = baseSeaX
-                    + MathF.Sin(ny * MathF.Tau * 1.15f + phaseA) * (w * (isArchipelago ? 0.085f : 0.055f))
-                    + MathF.Cos(ny * MathF.Tau * 2.4f + phaseB) * (w * 0.025f);
-                float halfWidth = Math.Max(4.5f, (w * 0.055f + MathF.Sin(ny * MathF.Tau * 1.8f + phaseC) * 1.6f) * seaWidthScale);
-
-                int minSeaX = Math.Clamp((int)MathF.Floor(seaCenter - halfWidth), 12, w - 18);
-                int maxSeaX = Math.Clamp((int)MathF.Ceiling(seaCenter + halfWidth), minSeaX + 7, w - 14);
-
-                for (int x = minSeaX; x <= maxSeaX; x++)
+                float baseSeaX = w * ((isArchipelago ? 0.46f : 0.44f) + (float)_rng.NextDouble() * 0.22f);
+                float seaWidthScale = isArchipelago ? 1.45f : (isAlpine ? 0.85f : 1.0f);
+                for (int y = 0; y < h; y++)
                 {
-                    world.Grid[x, y].Terrain = TerrainType.Water;
-                    world.OceanMask[x, y] = true;
-                }
-            }
+                    float ny = (float)y / Math.Max(1, h - 1);
+                    float seaCenter = baseSeaX
+                        + MathF.Sin(ny * MathF.Tau * 1.15f + phaseA) * (w * (isArchipelago ? 0.095f : 0.065f))
+                        + MathF.Cos(ny * MathF.Tau * 2.4f + phaseB) * (w * 0.03f);
+                    float halfWidth = Math.Max(4.5f, (w * 0.055f + MathF.Sin(ny * MathF.Tau * 1.8f + phaseC) * 1.6f) * seaWidthScale);
 
-            if (isArchipelago)
-            {
-                // Enseadas e braços costeiros adicionais para criar ilhas e penínsulas navegáveis
-                int inletY = Math.Clamp((int)(h * 0.48f), 10, h - 11);
-                for (int x = Math.Max(6, (int)(w * 0.24f)); x < (int)(w * 0.62f); x++)
-                {
-                    float wv = MathF.Sin(x * 0.22f + phaseB) * 2.2f;
-                    int cy = Math.Clamp(inletY + (int)MathF.Round(wv), 6, h - 7);
-                    for (int dy = -2; dy <= 2; dy++)
+                    int minSeaX = Math.Clamp((int)MathF.Floor(seaCenter - halfWidth), 12, w - 18);
+                    int maxSeaX = Math.Clamp((int)MathF.Ceiling(seaCenter + halfWidth), minSeaX + 7, w - 14);
+
+                    for (int x = minSeaX; x <= maxSeaX; x++)
                     {
-                        int yy = cy + dy;
-                        if (yy >= 4 && yy < h - 4)
+                        world.Grid[x, y].Terrain = TerrainType.Water;
+                        world.OceanMask[x, y] = true;
+                    }
+                }
+
+                if (isArchipelago)
+                {
+                    // Enseadas e braços costeiros adicionais para criar ilhas e penínsulas navegáveis
+                    int inletY = Math.Clamp((int)(h * (0.28f + _rng.NextDouble() * 0.44f)), 10, h - 11);
+                    for (int x = Math.Max(6, (int)(w * 0.20f)); x < (int)(w * 0.72f); x++)
+                    {
+                        float wv = MathF.Sin(x * 0.22f + phaseB) * 2.4f;
+                        int cy = Math.Clamp(inletY + (int)MathF.Round(wv), 6, h - 7);
+                        for (int dy = -2; dy <= 2; dy++)
                         {
-                            world.Grid[x, yy].Terrain = TerrainType.Water;
-                            world.OceanMask[x, yy] = true;
+                            int yy = cy + dy;
+                            if (yy >= 4 && yy < h - 4)
+                            {
+                                world.Grid[x, yy].Terrain = TerrainType.Water;
+                                world.OceanMask[x, yy] = true;
+                            }
                         }
                     }
                 }
             }
-        }
-        else
-        {
-            // Mapas compactos (ex.: testes ou 50x50): enseada oceânica conectada à borda Leste/Sul
-            int bayWidth = isArchipelago ? Math.Max(6, w / 5) : Math.Max(3, w / 9);
-            int bayHeight = isArchipelago ? Math.Max(10, (int)(h * 0.78f)) : Math.Max(6, h / 2);
-            int bayStartY = Math.Max(2, (h - bayHeight) / 2);
-            for (int y = bayStartY; y < Math.Min(h, bayStartY + bayHeight); y++)
+            else
             {
-                float wave = MathF.Sin(y * 0.35f + phaseA) * (isArchipelago ? 2.0f : 1.1f);
-                int startX = Math.Clamp(w - bayWidth + (int)MathF.Round(wave), w / 2, w - 2);
-                for (int x = startX; x < w; x++)
+                // Mapas compactos (ex.: testes ou 50x50): enseada oceânica conectada à borda Leste/Sul
+                int bayWidth = isArchipelago ? Math.Max(6, w / 5) : Math.Max(3, w / 9);
+                int bayHeight = isArchipelago ? Math.Max(10, (int)(h * 0.78f)) : Math.Max(6, h / 2);
+                int bayStartY = Math.Max(2, (h - bayHeight) / 2);
+                for (int y = bayStartY; y < Math.Min(h, bayStartY + bayHeight); y++)
                 {
-                    world.Grid[x, y].Terrain = TerrainType.Water;
-                    world.OceanMask[x, y] = true;
+                    float wave = MathF.Sin(y * 0.35f + phaseA) * (isArchipelago ? 2.0f : 1.1f);
+                    int startX = Math.Clamp(w - bayWidth + (int)MathF.Round(wave), w / 2, w - 2);
+                    for (int x = startX; x < w; x++)
+                    {
+                        world.Grid[x, y].Terrain = TerrainType.Water;
+                        world.OceanMask[x, y] = true;
+                    }
                 }
             }
         }
 
-        // B. Cordilheiras & Colinas (sopés em volta das montanhas para relevo natural)
+        // B. Relevo orgânico por ruído Ridged-FBM com deformação de domínio (cadeias naturais + amplos vales planos)
         int[,] elevation = new int[w, h]; // 0 = planície, 1 = colina, 2 = montanha
-        int baseRadius = isAlpine ? (hasOceanChannel ? 4 : 3) : (isArchipelago ? 1 : (hasOceanChannel ? 3 : 2));
-        int ridgeRadius = _config.Mountains switch
+        float hillThresh = _config.Mountains switch
         {
-            MountainDensity.Few => Math.Max(1, baseRadius - 1),
-            MountainDensity.Many => baseRadius + 1,
-            _ => baseRadius
+            MountainDensity.Few => 0.70f,
+            MountainDensity.Many => 0.42f,
+            _ => 0.56f
         };
-        float peakChanceScale = _config.Mountains switch
+        float peakThresh = _config.Mountains switch
         {
-            MountainDensity.Few => 0.45f,
-            MountainDensity.Many => 1.35f,
-            _ => 1.0f
+            MountainDensity.Few => 0.82f,
+            MountainDensity.Many => 0.58f,
+            _ => 0.71f
         };
 
-        CarveMountainRidge(
-            world,
-            elevation,
-            startX: Math.Clamp((int)(w * 0.16f), 4, w - 6),
-            startY: Math.Clamp((int)(h * 0.16f), 4, h - 6),
-            endX: Math.Clamp((int)(w * (hasOceanChannel ? 0.48f : 0.68f)), 6, w - 6),
-            endY: Math.Clamp((int)(h * 0.28f), 6, h - 6),
-            halfRadius: ridgeRadius,
-            phase: phaseA,
-            peakScale: peakChanceScale);
-
-        if ((hasOceanChannel && !isArchipelago && _config.Mountains != MountainDensity.Few) ||
-            _config.Mountains == MountainDensity.Many)
+        if (isAlpine)
         {
-            // Segunda cadeia de colinas ao centro-sul do continente principal
-            CarveMountainRidge(
-                world,
-                elevation,
-                startX: (int)(w * 0.12f),
-                startY: (int)(h * 0.62f),
-                endX: (int)(w * 0.28f),
-                endY: (int)(h * 0.78f),
-                halfRadius: _config.Mountains == MountainDensity.Many ? 3 : (isAlpine ? 3 : 2),
-                phase: phaseB,
-                peakScale: peakChanceScale);
-
-            if (hasOceanChannel)
-            {
-                // Cadeia de colinas minerais no continente ultramarino (Leste)
-                CarveMountainRidge(
-                    world,
-                    elevation,
-                    startX: Math.Clamp((int)(w * 0.84f), 6, w - 5),
-                    startY: Math.Clamp((int)(h * 0.24f), 6, h - 6),
-                    endX: Math.Clamp((int)(w * 0.90f), 6, w - 4),
-                    endY: Math.Clamp((int)(h * 0.56f), 6, h - 6),
-                    halfRadius: _config.Mountains == MountainDensity.Many ? 3 : (isAlpine ? 3 : 2),
-                    phase: phaseC,
-                    peakScale: peakChanceScale);
-            }
+            hillThresh -= 0.07f;
+            peakThresh -= 0.07f;
+        }
+        else if (isArchipelago)
+        {
+            hillThresh += 0.05f;
+            peakThresh += 0.05f;
         }
 
-        if (isAlpine || _config.Mountains == MountainDensity.Many)
+        float mtnScaleFactor = isLargeMap ? 0.036f : 0.056f;
+        float beltScaleFactor = isLargeMap ? 0.022f : 0.042f;
+        for (int x = 1; x < w - 1; x++)
         {
-            // Maciço central elevado com desfiladeiros para túneis
-            CarveMountainRidge(
-                world,
-                elevation,
-                startX: Math.Clamp((int)(w * 0.22f), 4, w - 6),
-                startY: Math.Clamp((int)(h * 0.42f), 4, h - 6),
-                endX: Math.Clamp((int)(w * 0.46f), 6, w - 6),
-                endY: Math.Clamp((int)(h * 0.50f), 6, h - 6),
-                halfRadius: hasOceanChannel ? 3 : 2,
-                phase: phaseC + 1.1f,
-                peakScale: peakChanceScale);
+            for (int y = 1; y < h - 1; y++)
+            {
+                if (world.OceanMask[x, y]) continue;
+
+                float mWarpX = (SampleFbm2D(_config.Seed + 17, x, y, mtnScaleFactor * 1.15f, 2) - 0.5f) * 14f;
+                float mWarpY = (SampleFbm2D(_config.Seed + 53, x, y, mtnScaleFactor * 1.15f, 2) - 0.5f) * 14f;
+                float ridgeRaw = SampleFbm2D(_config.Seed + 109, x + mWarpX, y + mWarpY, mtnScaleFactor, 3);
+                float ridge = 1f - MathF.Abs(2f * ridgeRaw - 1f);
+                float beltMask = SampleFbm2D(_config.Seed + 211, x * 0.85f, y * 0.85f, beltScaleFactor, 2);
+                float score = MathF.Pow(ridge, 2.2f) * (0.25f + 0.75f * beltMask);
+
+                if (score >= peakThresh)
+                    elevation[x, y] = 2;
+                else if (score >= hillThresh)
+                    elevation[x, y] = 1;
+            }
         }
 
         for (int x = 0; x < w; x++)
@@ -286,109 +267,137 @@ public class WorldGenerator
             }
         }
 
-        // C. Rios sinuosos nascendo nas serras e desaguando no Oceano
+        // C. Rios sinuosos nascendo nas terras altas e desaguando no Oceano
         if (_config.HasRivers)
         {
+            int rStartX1 = Math.Clamp((int)(w * (0.10f + _rng.NextDouble() * 0.16f)), 4, w - 6);
+            int rStartY1 = Math.Clamp((int)(h * (0.14f + _rng.NextDouble() * 0.30f)), 4, h - 6);
             CarveRiverToSea(
                 world,
-                startX: Math.Clamp((int)(w * 0.20f), 4, w - 6),
-                startY: Math.Clamp((int)(h * 0.24f), 4, h - 6),
+                startX: rStartX1,
+                startY: rStartY1,
                 hasOceanChannel: hasOceanChannel,
                 meanderPhase: phaseB);
 
             if (hasOceanChannel)
             {
+                int rStartX2 = Math.Clamp((int)(w * (0.10f + _rng.NextDouble() * 0.18f)), 4, w - 6);
+                int rStartY2 = Math.Clamp((int)(h * (0.54f + _rng.NextDouble() * 0.32f)), 4, h - 6);
                 CarveRiverToSea(
                     world,
-                    startX: Math.Clamp((int)(w * 0.18f), 4, w - 6),
-                    startY: Math.Clamp((int)(h * 0.72f), 4, h - 6),
+                    startX: rStartX2,
+                    startY: rStartY2,
                     hasOceanChannel: true,
                     meanderPhase: phaseC);
             }
         }
 
-        // D. Biomas coerentes com relevo, latitude e sombra de chuva
-        int desertCenterX = Math.Clamp((int)(w * (hasOceanChannel ? 0.16f : 0.24f)), 4, w - 5);
-        int desertCenterY = Math.Clamp((int)(h * 0.78f), 4, h - 5);
-        float desertRadius = isAlpine ? 0f : Math.Max(7f, Math.Min(w, h) * 0.22f);
-        float alpineHillCutoff = isAlpine ? 0.56f : 0.30f;
-        float alpinePlainCutoff = isAlpine ? 0.36f : 0.20f;
+        // D. Biomas 100% orgânicos por clima (Temperatura + Umidade FBM + Altitude + Proximidade Hídrica)
+        // Sem círculo obrigatório nem faixa fixa: desertos, planícies e áreas alpinas surgem naturalmente por seed.
+        float axisAngle = (float)(_rng.NextDouble() * MathF.Tau);
+        float axisCos = MathF.Cos(axisAngle);
+        float axisSin = MathF.Sin(axisAngle);
+        float axisStrength = (float)(_rng.NextDouble() * 0.24);
+        float globalTempOffset = (float)(_rng.NextDouble() * 0.24 - 0.12) + (isAlpine ? -0.16f : (isArchipelago ? 0.06f : 0f));
+        float globalMoistOffset = (float)(_rng.NextDouble() * 0.28 - 0.14) + (isArchipelago ? 0.14f : 0f);
+        float climateScale = isLargeMap ? 0.025f : 0.036f;
 
         for (int x = 0; x < w; x++)
         {
             for (int y = 0; y < h; y++)
             {
-                float warp = MathF.Sin(x * 0.14f + phaseA) * 2.2f + MathF.Cos(y * 0.14f + phaseB) * 2.2f;
                 ref var cell = ref world.Grid[x, y];
+                float cWarpX = (SampleFbm2D(_config.Seed + 401, x, y, 0.035f, 2) - 0.5f) * 18f;
+                float cWarpY = (SampleFbm2D(_config.Seed + 607, x, y, 0.035f, 2) - 0.5f) * 18f;
 
-                if (cell.Terrain == TerrainType.Mountain || (y + warp < h * alpineHillCutoff && (cell.Terrain == TerrainType.Hills || elevation[x, y] > 0)))
+                float nx = (x / Math.Max(1f, w - 1f)) - 0.5f;
+                float ny = (y / Math.Max(1f, h - 1f)) - 0.5f;
+                float axisProj = (nx * axisCos + ny * axisSin) * axisStrength;
+
+                float baseTemp = SampleFbm2D(_config.Seed + 809, x + cWarpX, y + cWarpY, climateScale, 3);
+                float baseMoist = SampleFbm2D(_config.Seed + 997, x - cWarpY * 0.8f, y + cWarpX * 0.8f, climateScale * 1.1f, 3);
+
+                float elevCool = elevation[x, y] switch
                 {
-                    cell.Biome = BiomeType.Alpine;
-                    continue;
+                    >= 2 => 0.36f,
+                    1 => 0.12f,
+                    _ => 0f
+                };
+
+                float waterMoisture = 0f;
+                if (!world.OceanMask[x, y] && cell.Terrain != TerrainType.Water)
+                {
+                    if (HasWaterWithin(world, x, y, 2)) waterMoisture = 0.15f;
+                    else if (HasWaterWithin(world, x, y, 5)) waterMoisture = 0.06f;
                 }
 
-                float dx = x - desertCenterX;
-                float dy = y - desertCenterY;
-                float distDesert = MathF.Sqrt(dx * dx + dy * dy) + warp * 0.7f;
+                float temp = baseTemp + axisProj + globalTempOffset - elevCool;
+                float moist = baseMoist + globalMoistOffset + waterMoisture;
 
-                // Bacia árida fora da calha imediata de rios/oceano
-                bool onWaterEdge = HasWaterWithin(world, x, y, 1);
-                if (!isArchipelago && !onWaterEdge && distDesert <= desertRadius && cell.Terrain != TerrainType.Water)
+                if (cell.Terrain == TerrainType.Mountain)
+                {
+                    cell.Biome = (temp > 0.44f && moist < 0.33f && !isAlpine)
+                        ? BiomeType.Desert
+                        : BiomeType.Alpine;
+                }
+                else if (temp < 0.36f && !world.OceanMask[x, y])
+                {
+                    cell.Biome = BiomeType.Alpine;
+                }
+                else if (temp > 0.52f && moist < 0.46f && cell.Terrain != TerrainType.Water)
                 {
                     cell.Biome = BiomeType.Desert;
                 }
                 else
                 {
-                    cell.Biome = (y + warp < h * alpinePlainCutoff && !world.OceanMask[x, y])
-                        ? BiomeType.Alpine
-                        : BiomeType.Temperate;
+                    cell.Biome = BiomeType.Temperate;
                 }
             }
         }
     }
 
-    private void CarveMountainRidge(
-        GeneratedWorld world,
-        int[,] elevation,
-        int startX,
-        int startY,
-        int endX,
-        int endY,
-        int halfRadius,
-        float phase,
-        float peakScale = 1.0f)
+    private static float Hash2D(int seed, int x, int y)
     {
-        int w = world.Grid.GetLength(0);
-        int h = world.Grid.GetLength(1);
-        int steps = Math.Max(12, Math.Abs(endX - startX) + Math.Abs(endY - startY));
-        double mountainProb = Math.Clamp(0.78 * peakScale, 0.25, 0.92);
-        double hillProb = Math.Clamp(0.80 * peakScale, 0.40, 0.94);
-
-        for (int s = 0; s <= steps; s++)
+        unchecked
         {
-            float t = (float)s / steps;
-            float px = startX + (endX - startX) * t + MathF.Sin(t * MathF.PI * 2f + phase) * 2.1f;
-            float py = startY + (endY - startY) * t + MathF.Cos(t * MathF.PI * 1.5f + phase) * 1.8f;
-            int cx = Math.Clamp((int)MathF.Round(px), 2, w - 3);
-            int cy = Math.Clamp((int)MathF.Round(py), 2, h - 3);
-
-            for (int dx = -halfRadius; dx <= halfRadius; dx++)
-            {
-                for (int dy = -halfRadius; dy <= halfRadius; dy++)
-                {
-                    int nx = cx + dx;
-                    int ny = cy + dy;
-                    if (nx < 1 || nx >= w - 1 || ny < 1 || ny >= h - 1 || world.OceanMask[nx, ny])
-                        continue;
-
-                    float d = MathF.Sqrt(dx * dx + dy * dy);
-                    if (d <= 0.8f * peakScale && _rng.NextDouble() < mountainProb)
-                        elevation[nx, ny] = Math.Max(elevation[nx, ny], 2);
-                    else if (d <= halfRadius + 0.35f && _rng.NextDouble() < hillProb)
-                        elevation[nx, ny] = Math.Max(elevation[nx, ny], 1);
-                }
-            }
+            uint h = (uint)(seed * 374761393 + x * 668265263 + y * 2147483647);
+            h = (h ^ (h >> 13)) * 1274126177u;
+            h ^= h >> 16;
+            return (h & 0x00FFFFFFu) / 16777215f;
         }
+    }
+
+    private static float SampleValueNoise2D(int seed, float x, float y)
+    {
+        int ix = (int)MathF.Floor(x);
+        int iy = (int)MathF.Floor(y);
+        float fx = x - ix;
+        float fy = y - iy;
+        float ux = fx * fx * fx * (fx * (fx * 6f - 15f) + 10f);
+        float uy = fy * fy * fy * (fy * (fy * 6f - 15f) + 10f);
+
+        float a = Hash2D(seed, ix, iy);
+        float b = Hash2D(seed, ix + 1, iy);
+        float c = Hash2D(seed, ix, iy + 1);
+        float d = Hash2D(seed, ix + 1, iy + 1);
+
+        return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+    }
+
+    private static float SampleFbm2D(int seed, float x, float y, float frequency, int octaves = 3)
+    {
+        float sum = 0f;
+        float amp = 1f;
+        float norm = 0f;
+        float freq = frequency;
+        for (int o = 0; o < octaves; o++)
+        {
+            sum += SampleValueNoise2D(seed + o * 1013, x * freq, y * freq) * amp;
+            norm += amp;
+            amp *= 0.5f;
+            freq *= 2.05f;
+        }
+        return norm > 0f ? sum / norm : 0f;
     }
 
     private void CarveRiverToSea(GeneratedWorld world, int startX, int startY, bool hasOceanChannel, float meanderPhase)
@@ -1292,20 +1301,27 @@ public class WorldGenerator
             }
         }
 
-        // 2. Ramais das Indústrias para a cidade mais próxima DO MESMO CONTINENTE
+        // 2. Ramais das Indústrias para a cidade mais próxima DO MESMO CONTINENTE (com fallback global)
         foreach (var ind in world.Industries)
         {
             int cid = world.ContinentMap[ind.GridX, ind.GridY];
             var nearestCity = world.Cities
                 .Where(c => world.ContinentMap[c.CenterX, c.CenterY] == cid)
                 .OrderBy(c => MathF.Abs(c.CenterX - ind.GridX) + MathF.Abs(c.CenterY - ind.GridY))
-                .FirstOrDefault();
+                .FirstOrDefault()
+                ?? world.Cities
+                    .OrderBy(c => MathF.Abs(c.CenterX - ind.GridX) + MathF.Abs(c.CenterY - ind.GridY))
+                    .FirstOrDefault();
 
+            var indAccess = GetAccessPointForIndustry(world, ind.GridX, ind.GridY);
             if (nearestCity != null)
             {
-                var indAccess = GetAccessPointForIndustry(world, ind.GridX, ind.GridY);
                 var cityAccess = GetCityAccessPoint(world, nearestCity);
                 LinkPoints(indAccess.X, indAccess.Y, cityAccess.X, cityAccess.Y);
+            }
+            else if (indAccess != (ind.GridX, ind.GridY))
+            {
+                world.Grid[indAccess.X, indAccess.Y].RoadLevel = RoadTier.Dirt;
             }
         }
 
@@ -1401,6 +1417,19 @@ public class WorldGenerator
         int w = world.Grid.GetLength(0);
         int h = world.Grid.GetLength(1);
         var offsets = new[] { (0, 1), (1, 0), (0, -1), (-1, 0) };
+
+        // Prefer an adjacent cell that already carries a road to avoid awkward parallel dead-end stubs
+        foreach (var (dx, dy) in offsets)
+        {
+            int ax = ix + dx;
+            int ay = iy + dy;
+            if (ax >= 0 && ax < w && ay >= 0 && ay < h && !world.OceanMask[ax, ay]
+                && world.Grid[ax, ay].HasRoad && world.Grid[ax, ay].OccupantId < 100)
+            {
+                return (ax, ay);
+            }
+        }
+
         foreach (var (dx, dy) in offsets)
         {
             int ax = ix + dx;
@@ -1481,10 +1510,32 @@ public class WorldGenerator
         int endY,
         HashSet<(int X, int Y)> cityCenterLots)
     {
-        const float roadReuseCost = 0.35f;
+        const float roadReuseCost = 0.62f;
         int w = world.Grid.GetLength(0);
         int h = world.Grid.GetLength(1);
         int totalStates = w * h * 5;
+
+        float segDx = endX - startX;
+        float segDy = endY - startY;
+        float segLenSq = segDx * segDx + segDy * segDy;
+        float directEuclidean = MathF.Sqrt(segLenSq);
+        float corridorRadius = MathF.Max(10.0f, directEuclidean * 0.30f);
+        int citySig = 0;
+        for (int i = 0; i < world.Cities.Count; i++)
+            citySig = unchecked(citySig * 31 + world.Cities[i].CenterX * 73 + world.Cities[i].CenterY * 137);
+        int routeSeed = unchecked(startX * 73856093 ^ startY * 19349663 ^ endX * 83492791 ^ endY * 26544357 ^ citySig ^ (w * 997 + h));
+
+        float CrossTrackDistance(int px, int py)
+        {
+            if (segLenSq <= 0.001f)
+                return MathF.Sqrt((px - startX) * (px - startX) + (py - startY) * (py - startY));
+            float t = Math.Clamp(((px - startX) * segDx + (py - startY) * segDy) / segLenSq, 0f, 1f);
+            float projX = startX + t * segDx;
+            float projY = startY + t * segDy;
+            float dxP = px - projX;
+            float dyP = py - projY;
+            return MathF.Sqrt(dxP * dxP + dyP * dyP);
+        }
 
         var open = new PriorityQueue<int, float>();
         var cameFrom = new int[totalStates];
@@ -1542,22 +1593,38 @@ public class WorldGenerator
                 }
 
                 var cell = world.Grid[nx, ny];
+                float crossDist = CrossTrackDistance(nx, ny);
                 float stepCost;
                 if (cell.HasRoad)
                     stepCost = roadReuseCost;
                 else if (cell.OccupantId > 0 && !isGoal)
                     stepCost = 6.0f; // Evita atravessar quarteirões urbanos vizinhos quando houver campo livre
                 else
-                    stepCost = cell.Terrain switch
+                {
+                    // Ruído coerente guiado para traçado orgânico natural sem desvios exagerados
+                    float organicJitter = SampleValueNoise2D(routeSeed, nx * 0.24f, ny * 0.24f) * 0.44f;
+                    stepCost = (cell.Terrain switch
                     {
-                        TerrainType.Water => 16.0f,    // Ponte apenas quando preciso em rios
-                        TerrainType.Hills => 4.2f,
-                        TerrainType.Mountain => 48.0f,
+                        TerrainType.Water => 9.0f,    // Ponte apenas quando preciso em rios
+                        TerrainType.Hills => 2.5f,
+                        TerrainType.Mountain => 26.0f, // Contorna picos por vales próximos, evitando grandes voltas na borda do mapa
                         _ => 1.0f
-                    };
+                    }) + organicJitter;
+                }
+
+                if (!isGoal)
+                {
+                    // Guia o traçado próximo ao corredor ótimo entre origem e destino, impedindo estradas longas demais
+                    if (crossDist > corridorRadius)
+                        stepCost += (crossDist - corridorRadius) * 0.45f;
+
+                    // Desencoraja estradas coladas exatamente na moldura externa do mapa
+                    if (nx == 0 || nx == w - 1 || ny == 0 || ny == h - 1)
+                        stepCost += 1.8f;
+                }
 
                 if (currDir < 4 && d != currDir)
-                    stepCost += cell.HasRoad ? 0.03f : 0.22f;
+                    stepCost += cell.HasRoad ? 0.04f : 0.26f;
 
                 if (!cell.HasRoad && !isGoal)
                 {
@@ -1591,7 +1658,7 @@ public class WorldGenerator
                 {
                     cameFrom[nextState] = state;
                     gScore[nextState] = tentativeG;
-                    float hEst = roadReuseCost * (MathF.Abs(endX - nx) + MathF.Abs(endY - ny));
+                    float hEst = roadReuseCost * (MathF.Abs(endX - nx) + MathF.Abs(endY - ny)) + 0.04f * crossDist;
                     open.Enqueue(nextState, tentativeG + hEst);
                 }
             }

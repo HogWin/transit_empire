@@ -252,11 +252,11 @@ public partial class MainView
         _ngSize100Btn = CreateToggleOptionButton(sizeRow, "100×100 Grande", () => { _ngSize = 100; RefreshNewGameCreatorAndPreview(); });
         formCol.AddChild(sizeRow);
 
-        formCol.AddChild(CreateLabel("2. RIOS & HIDROGRAFIA INTERIOR", new Color("38bdf8"), 11));
+        formCol.AddChild(CreateLabel("2. RIOS, CONTINENTES & PORTOS", new Color("38bdf8"), 11));
         var riverRow = new HBoxContainer();
         riverRow.AddThemeConstantOverride("separation", 6);
-        _ngRiversYesBtn = CreateToggleOptionButton(riverRow, "🌊 Com Rios", () => { _ngHasRivers = true; RefreshNewGameCreatorAndPreview(); });
-        _ngRiversNoBtn = CreateToggleOptionButton(riverRow, "🏜️ Sem Rios", () => { _ngHasRivers = false; RefreshNewGameCreatorAndPreview(); });
+        _ngRiversYesBtn = CreateToggleOptionButton(riverRow, "🌊 Com Rios & Portos", () => { _ngHasRivers = true; RefreshNewGameCreatorAndPreview(); });
+        _ngRiversNoBtn = CreateToggleOptionButton(riverRow, "🏜️ Sem Rios (Continente Único)", () => { _ngHasRivers = false; RefreshNewGameCreatorAndPreview(); });
         formCol.AddChild(riverRow);
 
         formCol.AddChild(CreateLabel("3. RELEVO & MONTANHAS", new Color("38bdf8"), 11));

@@ -1069,6 +1069,28 @@ public partial class MainView : Node3D
     private static (int Cx, int Cy) GetRoadChunkCoord(int x, int y)
         => (x / RoadChunkSize, y / RoadChunkSize);
 
+    private HashSet<(int X, int Y)> BuildFacilityDockTileSet()
+    {
+        var docks = new HashSet<(int X, int Y)>();
+        foreach (var ind in _bridge.World.Industries)
+            docks.Add((ind.GridX, ind.GridY));
+        foreach (var sp in _bridge.World.Seaports)
+            docks.Add((sp.GridX, sp.GridY));
+        foreach (var lm in _bridge.World.Landmarks)
+            docks.Add((lm.GridX, lm.GridY));
+        foreach (var city in _bridge.World.Cities)
+            docks.Add((city.CenterX, city.CenterY));
+        foreach (var g in _bridge.Engine.Garages)
+            docks.Add((g.GridX, g.GridY));
+        foreach (var h in _bridge.Engine.LogisticsHubs)
+            docks.Add((h.GridX, h.GridY));
+        foreach (var bt in _bridge.Engine.BusTerminals)
+            docks.Add((bt.GridX, bt.GridY));
+        foreach (var it in _bridge.Engine.IntermodalTerminals)
+            docks.Add((it.GridX, it.GridY));
+        return docks;
+    }
+
     private void RebuildRoadChunk(int cx, int cy)
     {
         var chunkKey = (cx, cy);
@@ -1089,6 +1111,7 @@ public partial class MainView : Node3D
         int endX = Math.Min(w, startX + RoadChunkSize);
         int endY = Math.Min(h, startY + RoadChunkSize);
 
+        var facilityDocks = BuildFacilityDockTileSet();
         var tiles = new List<ProceduralModels3D.RoadTileRenderInput>();
         for (int x = startX; x < endX; x++)
         {
@@ -1106,6 +1129,10 @@ public partial class MainView : Node3D
                 bool connectS = y < h - 1 && grid[x, y + 1].HasRoad;
                 bool connectE = x < w - 1 && grid[x + 1, y].HasRoad;
                 bool connectW = x > 0 && grid[x - 1, y].HasRoad;
+                bool dockN = y > 0 && facilityDocks.Contains((x, y - 1));
+                bool dockS = y < h - 1 && facilityDocks.Contains((x, y + 1));
+                bool dockE = x < w - 1 && facilityDocks.Contains((x + 1, y));
+                bool dockW = x > 0 && facilityDocks.Contains((x - 1, y));
 
                 float pavCond = _bridge.Engine.GetCellPavementCondition(x, y);
                 bool blockedByLandslide = _bridge.Engine.IsCellBlockedByLandslide(x, y);
@@ -1132,7 +1159,11 @@ public partial class MainView : Node3D
                     blockedByLandslide,
                     cell.RivalOwnerId,
                     rivalColor,
-                    downtownCongested));
+                    downtownCongested,
+                    dockN,
+                    dockS,
+                    dockE,
+                    dockW));
             }
         }
 
@@ -3134,16 +3165,19 @@ public partial class MainView : Node3D
                     {
                         if (IsInstanceValid(gNode)) gNode.QueueFree();
                         _garageNodes.Remove(demResult.RemovedEntityId);
+                        RebuildRoadAndNeighbors(gx, gy);
                     }
                     else if (demResult.Kind == DemolishTargetKind.LogisticsHub && _hubNodes.TryGetValue(demResult.RemovedEntityId, out var hNode))
                     {
                         if (IsInstanceValid(hNode)) hNode.QueueFree();
                         _hubNodes.Remove(demResult.RemovedEntityId);
+                        RebuildRoadAndNeighbors(gx, gy);
                     }
                     else if (demResult.Kind == DemolishTargetKind.BusTerminal && _busTerminalNodes.TryGetValue(demResult.RemovedEntityId, out var btNode))
                     {
                         if (IsInstanceValid(btNode)) btNode.QueueFree();
                         _busTerminalNodes.Remove(demResult.RemovedEntityId);
+                        RebuildRoadAndNeighbors(gx, gy);
                     }
                     else if (demResult.Kind == DemolishTargetKind.TollStation && _tollNodes.TryGetValue(demResult.RemovedEntityId, out var tNode))
                     {
@@ -3376,6 +3410,7 @@ public partial class MainView : Node3D
     {
         SpawnGarageMesh(garage);
         RefreshIndustryVisualsNear(garage.GridX, garage.GridY);
+        RebuildRoadAndNeighbors(garage.GridX, garage.GridY);
         RebuildSchedulePools();
         _minimapStaticDirty = true;
     }
@@ -3384,6 +3419,7 @@ public partial class MainView : Node3D
     {
         SpawnLogisticsHubMesh(hub);
         RefreshIndustryVisualsNear(hub.GridX, hub.GridY);
+        RebuildRoadAndNeighbors(hub.GridX, hub.GridY);
         RebuildSchedulePools();
         _minimapStaticDirty = true;
     }
@@ -3391,6 +3427,7 @@ public partial class MainView : Node3D
     private void OnBusTerminalBuilt(BusTerminal terminal)
     {
         SpawnBusTerminalMesh(terminal);
+        RebuildRoadAndNeighbors(terminal.GridX, terminal.GridY);
         RebuildSchedulePools();
         _minimapStaticDirty = true;
         RefreshHud();
