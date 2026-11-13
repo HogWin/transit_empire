@@ -194,6 +194,9 @@ public partial class MainView : Node3D
     private Button _inspectorGarageAutoReplaceBtn = null!;
     private Button _inspectorGarageCloneBtn = null!;
     private RichTextLabel _contractsText = null!;
+    private HBoxContainer _auctionBidRow = null!;
+    private Button _auctionTariffBidBtn = null!;
+    private Button _auctionExpressBidBtn = null!;
     private RichTextLabel _eventLogText = null!;
 
     // Aba Agenda (Schedule) + Frota Ativa estilo Voxel Tycoon
@@ -516,6 +519,9 @@ public partial class MainView : Node3D
         _bridge.Engine.OnTollCollected += OnTollCollected;
         _bridge.Engine.OnTollWeighUpdated += OnTollWeighUpdated;
         _bridge.Engine.OnContractLostToRival += OnContractLostToRival;
+        _bridge.Engine.OnContractAuctionWon += OnContractAuctionWon;
+        _bridge.Engine.OnRivalRoadBuilt += OnRivalRoadBuilt;
+        _bridge.Engine.OnRivalTollPaid += OnRivalTollPaid;
         _bridge.Engine.OnTruckRankUp += OnTruckRankUp;
         _bridge.Engine.OnSeaportShipStatusChanged += OnSeaportShipStatusChanged;
         _bridge.Engine.OnLandmarkProgress += OnLandmarkProgress;
@@ -1081,6 +1087,12 @@ public partial class MainView : Node3D
 
                 float pavCond = _bridge.Engine.GetCellPavementCondition(x, y);
                 bool blockedByLandslide = _bridge.Engine.IsCellBlockedByLandslide(x, y);
+                string? rivalColor = null;
+                if (cell.RivalOwnerId > 0)
+                {
+                    rivalColor = _bridge.Engine.Rivals.FirstOrDefault(r => r.Id == cell.RivalOwnerId)?.ColorHex;
+                }
+                bool downtownCongested = cell.RivalOwnerId == 0 && _bridge.Engine.IsTileInCongestedDowntown(x, y, out _, out _);
 
                 tiles.Add(new ProceduralModels3D.RoadTileRenderInput(
                     x,
@@ -1095,7 +1107,10 @@ public partial class MainView : Node3D
                     cell.Biome,
                     pavCond,
                     cell.Terrain,
-                    blockedByLandslide));
+                    blockedByLandslide,
+                    cell.RivalOwnerId,
+                    rivalColor,
+                    downtownCongested));
             }
         }
 
@@ -1168,7 +1183,7 @@ public partial class MainView : Node3D
             return;
 
         bool isCenter = (ux == city.CenterX && uy == city.CenterY);
-        var bNode = ProceduralModels3D.CreateCityBuildingNode(isCenter, ux * 37 + uy * 101 + city.Id);
+        var bNode = ProceduralModels3D.CreateCityBuildingNode(isCenter, ux * 37 + uy * 101 + city.Id, city.GetDistrictType(ux, uy));
         bNode.Position = GridToWorld(ux, uy);
         _structuresRoot.AddChild(bNode);
         _urbanTileNodes[(ux, uy)] = bNode;
@@ -3136,10 +3151,12 @@ public partial class MainView : Node3D
     private void OnCityExpanded(City city, int x, int y)
     {
         SpawnUrbanTileIfNeeded(city, x, y);
+        RebuildRoadAndNeighbors(city.CenterX, city.CenterY);
         RebuildRoadAndNeighbors(x, y);
         _minimapStaticDirty = true;
         _audio?.PlayNotification(celebratory: false);
-        LogEvent($"🏙️ {city.Name} expandiu! População: {city.Population} hab.");
+        string districtPt = city.GetDistrictType(x, y) == UrbanDistrictType.Commercial ? "Comercial" : "Residencial";
+        LogEvent($"🏙️ {city.Name} expandiu bairro {districtPt}! População: {city.Population} hab.");
     }
 
     private void OnDemandIncreased(City city, ResourceType resource, int delta, bool isNewResource)
@@ -3242,6 +3259,29 @@ public partial class MainView : Node3D
         SpawnFloatingRevenuePopup(GridToWorld(terminal.GridX, terminal.GridY), $"+R$ {revenue:N0} ({count} pass.)", new Color("38bdf8"), fontSize: 50, duration: 2.1f);
         _audio?.PlayCashRegister(revenue);
         LogEvent($"🚌 {bus.Name} desembarcou {count} passageiros em {terminal.Name} (+R$ {revenue:N0} em passagens).");
+    }
+
+    private void OnContractAuctionWon(LogisticsContract contract, string winnerName)
+    {
+        bool playerWon = winnerName == _bridge.Engine.Player.CompanyName;
+        _audio?.PlayNotification(celebratory: playerWon);
+        LogEvent(playerWon
+            ? $"🏆 Leilão vencido! Exclusividade garantida em {contract.TargetCity.Name} (Tarifa {contract.FreightMultiplier * 100f:F0}%)."
+            : $"🏢 Leilão perdido para {winnerName} ({contract.TargetCity.Name}).");
+        RefreshHud();
+    }
+
+    private void OnRivalRoadBuilt(RivalCompany rival, List<RoadEdge> createdEdges, long tollFee)
+    {
+        RebuildAllRoadChunks();
+        _minimapStaticDirty = true;
+        LogEvent($"🚧 {rival.Name} inaugurou trecho próprio pedagiado (R$ {tollFee:N0}/viagem). Construa um desvio competitivo!");
+        RefreshHud();
+    }
+
+    private void OnRivalTollPaid(Truck truck, RivalCompany rival, long fee)
+    {
+        LogEvent($"💸 {truck.Name} pagou R$ {fee:N0} de pedágio ao trecho rival de {rival.Name}.");
     }
 
     private void OnTruckPitStopCompleted(Truck truck, string facilityName, long cost)
@@ -4448,6 +4488,45 @@ public partial class MainView : Node3D
         };
         regRow.AddChild(_exploreRegionBtn);
         contractsBox.AddChild(regRow);
+
+        _auctionBidRow = new HBoxContainer { Visible = false };
+        _auctionBidRow.AddThemeConstantOverride("separation", 6);
+        _auctionTariffBidBtn = new Button { Text = "🏷️ Lance Tarifa (85%)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _auctionTariffBidBtn.AddThemeFontSizeOverride("font_size", 11);
+        _auctionTariffBidBtn.Pressed += () =>
+        {
+            var openAuction = _bridge.Engine.ActiveContracts.FirstOrDefault(c => c.IsAuctionOpen);
+            if (openAuction == null) return;
+            float nextMult = openAuction.HasPlayerBid
+                ? MathF.Max(0.65f, openAuction.PlayerBidFreightMultiplier - 0.05f)
+                : MathF.Max(0.75f, openAuction.RivalBidFreightMultiplier - 0.06f);
+            float nextDur = MathF.Min(openAuction.BaseDurationHours, openAuction.RivalBidDurationHours);
+            if (_bridge.PlacePlayerAuctionBid(openAuction.Id, nextMult, nextDur, out string bidMsg))
+                _audio?.PlayNotification(celebratory: true);
+            else
+                _audio?.PlayError();
+            LogEvent(bidMsg);
+            RefreshHud();
+        };
+        _auctionBidRow.AddChild(_auctionTariffBidBtn);
+
+        _auctionExpressBidBtn = new Button { Text = "⚡ Lance Expresso (70% Prazo)", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _auctionExpressBidBtn.AddThemeFontSizeOverride("font_size", 11);
+        _auctionExpressBidBtn.Pressed += () =>
+        {
+            var openAuction = _bridge.Engine.ActiveContracts.FirstOrDefault(c => c.IsAuctionOpen);
+            if (openAuction == null) return;
+            float nextMult = MathF.Min(0.92f, openAuction.RivalBidFreightMultiplier);
+            float nextDur = MathF.Max(48f, MathF.Round(openAuction.BaseDurationHours * 0.70f));
+            if (_bridge.PlacePlayerAuctionBid(openAuction.Id, nextMult, nextDur, out string bidMsg))
+                _audio?.PlayNotification(celebratory: true);
+            else
+                _audio?.PlayError();
+            LogEvent(bidMsg);
+            RefreshHud();
+        };
+        _auctionBidRow.AddChild(_auctionExpressBidBtn);
+        contractsBox.AddChild(_auctionBidRow);
 
         _contractsText = new RichTextLabel { BbcodeEnabled = true, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         _contractsText.AddThemeColorOverride("default_color", new Color("1f2937"));
@@ -5780,14 +5859,37 @@ public partial class MainView : Node3D
         if (_contractsText == null) return;
 
         var contractLines = new List<string>();
+        bool hasAnyOpenAuction = false;
         foreach (var c in _bridge.Engine.ActiveContracts)
         {
-            string statusColor = c.IsCompleted ? "#16a34a" : ((c.IsExpired || c.IsLostToRival) ? "#dc2626" : (c.IsSpecialConvoy ? "#7c3aed" : "#b45309"));
-            string convoyTag = c.IsSpecialConvoy ? "🚨 [COMBOIO 3x] " : string.Empty;
-            string statusTag = c.IsCompleted
-                ? "CONCLUÍDO"
-                : (c.IsLostToRival ? $"RIVAL ({c.ClaimedByRivalName})" : $"{c.DeliveredAmount}/{c.RequiredAmount} un. ({c.RemainingHours:F0}h)");
+            string statusColor = c.IsCompleted ? "#16a34a" : ((c.IsExpired || c.IsLostToRival) ? "#dc2626" : (c.IsAuctionOpen ? "#0284c7" : (c.IsSpecialConvoy ? "#7c3aed" : "#b45309")));
+            string convoyTag = c.IsSpecialConvoy ? "🚨 [COMBOIO 3x] " : (c.IsExclusiveAuction ? "🏷️ [LEILÃO] " : string.Empty);
+            string statusTag;
+            if (c.IsCompleted)
+            {
+                statusTag = "CONCLUÍDO";
+            }
+            else if (c.IsLostToRival)
+            {
+                statusTag = $"RIVAL ({c.ClaimedByRivalName})";
+            }
+            else if (c.IsAuctionOpen)
+            {
+                hasAnyOpenAuction = true;
+                string pBid = c.HasPlayerBid
+                    ? $"Você: {c.PlayerBidFreightMultiplier * 100f:F0}%/{c.PlayerBidDurationHours:F0}h"
+                    : "Sem lance seu";
+                statusTag = $"Aberto {c.AuctionRemainingHours:F0}h | {c.RivalBidCompanyName}: {c.RivalBidFreightMultiplier * 100f:F0}%/{c.RivalBidDurationHours:F0}h | {pBid}";
+            }
+            else
+            {
+                statusTag = $"{c.DeliveredAmount}/{c.RequiredAmount} un. ({c.RemainingHours:F0}h)";
+            }
             contractLines.Add($"[color={statusColor}]{convoyTag}• [b]{c.TargetCity.Name}[/b]: {c.Resource} — {statusTag} (+R$ {c.BonusRewardMoney:N0})[/color]");
+        }
+        if (_auctionBidRow != null)
+        {
+            _auctionBidRow.Visible = hasAnyOpenAuction;
         }
         if (_regionalStatusLabel != null && _exploreRegionBtn != null)
         {
@@ -5861,6 +5963,7 @@ public partial class MainView : Node3D
             $"[color=#b91c1c](-) Manutenção & Frota:[/color] R$ {stmt.FleetMaintenanceExpense:N0}",
             $"[color=#b91c1c](-) Conservação Viária:[/color] R$ {stmt.RoadMaintenanceExpense:N0}",
             $"[color=#b91c1c](-) Obras Viárias:[/color] R$ {stmt.RoadConstructionExpense:N0}",
+            $"[color=#b91c1c](-) Pedágios Rivais:[/color] R$ {stmt.RivalTollExpense:N0}",
             $"[color=#b91c1c](-) Juros Bancários:[/color] R$ {stmt.LoanInterestExpense:N0}",
             $"[color={opColor}][b]= Resultado Operacional: R$ {stmt.OperatingProfit:N0}[/b][/color]",
             $"[color=#475569](-) Investimentos (Frota/Obras/P&D/Regiões): R$ {stmt.InfrastructureAndFleetExpense:N0}[/color]",
@@ -6482,6 +6585,16 @@ public partial class MainView : Node3D
                     ? "🚦 Cruzamento Inteligente: [color=#15803d][b]ATIVO (+4 fluxo)[/b][/color]"
                     : "🔀 Entroncamento (3+ vias): [color=#b45309]Sem sinalização inteligente[/color]");
             }
+            if (cell.RivalOwnerId > 0)
+            {
+                long rToll = _bridge.Engine.GetRivalTollAtTile(sx, sy, out var rivalOwner);
+                lines.Add($"[color=#ea580c]🏢 Rodovia Rival ({rivalOwner?.Name ?? "Concorrente"}): Pedágio R$ {rToll:N0}/viagem — construa desvio![/color]");
+            }
+            if (_bridge.Engine.IsTileInCongestedDowntown(sx, sy, out var congCity, out float dtFactor))
+            {
+                int slowPct = Math.Clamp((int)Math.Round((1f - dtFactor) * 100f), 1, 80);
+                lines.Add($"[color=#d97706]🚦 Trânsito Urbano Central ({congCity?.Name}): -{slowPct}% vel. — construa Anel Viário periférico![/color]");
+            }
 
             if (_inspectorRepaveBtn != null)
             {
@@ -6517,6 +6630,12 @@ public partial class MainView : Node3D
             float sat = city.Warehouse.CalculateSatisfactionRate() * 100f;
             string subTag = sat >= 80f ? " [color=#0284c7](🏛️ Subsídio Ativo)[/color]" : "";
             lines.Add($"\n🏙️ [b]{city.Name}[/b] (Pop: {city.Population} hab • Exp. Nv.{city.ExpansionLevel})");
+            lines.Add($"🏘️ Bairros: [b]{city.ResidentialTileCount}[/b] Resid. • [b]{city.CommercialTileCount}[/b] Comerc.");
+            float dtMult = city.GetDowntownTrafficSpeedMultiplier();
+            if (dtMult < 0.999f)
+            {
+                lines.Add($"[color=#d97706]⚠️ Centro Congestionado: -{(1f - dtMult) * 100f:F0}% vel. (Anel Viário alivia rota)[/color]");
+            }
             lines.Add($"📊 Satisfação: [b]{sat:F0}%[/b]{subTag}");
             if (city.TotalSubsidiesReceived > 0)
             {

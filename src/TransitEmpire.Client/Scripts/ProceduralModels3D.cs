@@ -1247,7 +1247,10 @@ public static class ProceduralModels3D
         BiomeType Biome,
         float PavementCondition,
         TerrainType Terrain,
-        bool IsBlockedByLandslide);
+        bool IsBlockedByLandslide,
+        int RivalOwnerId = 0,
+        string? RivalColorHex = null,
+        bool IsDowntownCongested = false);
 
     private sealed class RoadChunkSurfaceCollector
     {
@@ -1507,6 +1510,9 @@ public static class ProceduralModels3D
         float pavementCondition = tile.PavementCondition;
         TerrainType terrain = tile.Terrain;
         bool isBlockedByLandslide = tile.IsBlockedByLandslide;
+        int rivalOwnerId = tile.RivalOwnerId;
+        string? rivalColorHex = tile.RivalColorHex;
+        bool isDowntownCongested = tile.IsDowntownCongested;
         Vector3 o = tile.WorldPosition;
 
         float width = tier switch
@@ -1656,6 +1662,30 @@ public static class ProceduralModels3D
             }
         }
 
+        // Sprint F4: faixas de pedágio rival na borda ou alerta de trânsito urbano pesado
+        if (rivalOwnerId > 0)
+        {
+            var rivalCol = new Color(string.IsNullOrWhiteSpace(rivalColorHex) ? "f97316" : rivalColorHex.TrimStart('#'));
+            float rOff = width * 0.5f + 0.07f;
+            if (!connectN && (connectE || connectW))
+                collector.AddFlatColorBox(new Vector3(TileSize * 0.84f, 0.09f, 0.08f), o + new Vector3(0, 0.065f, -rOff), rivalCol);
+            if (!connectS && (connectE || connectW))
+                collector.AddFlatColorBox(new Vector3(TileSize * 0.84f, 0.09f, 0.08f), o + new Vector3(0, 0.065f, rOff), rivalCol);
+            if (!connectW && (connectN || connectS))
+                collector.AddFlatColorBox(new Vector3(0.08f, 0.09f, TileSize * 0.84f), o + new Vector3(-rOff, 0.065f, 0), rivalCol);
+            if (!connectE && (connectN || connectS))
+                collector.AddFlatColorBox(new Vector3(0.08f, 0.09f, TileSize * 0.84f), o + new Vector3(rOff, 0.065f, 0), rivalCol);
+        }
+        else if (isDowntownCongested)
+        {
+            var amberCol = new Color("f59e0b");
+            float cOff = width * 0.5f + 0.05f;
+            if (!connectN && (connectE || connectW))
+                collector.AddFlatColorBox(new Vector3(0.35f, 0.055f, 0.06f), o + new Vector3(0, 0.048f, -cOff), amberCol);
+            if (!connectW && (connectN || connectS))
+                collector.AddFlatColorBox(new Vector3(0.06f, 0.055f, 0.35f), o + new Vector3(-cOff, 0.048f, 0), amberCol);
+        }
+
         // Estruturas Voxel Automáticas: Ponte (sobre Água) e Túnel (através de Morro/Montanha)
         if (structure == RoadStructureType.Bridge)
         {
@@ -1735,7 +1765,7 @@ public static class ProceduralModels3D
     /// Constrói edifícios urbanos no estilo exato das capturas (prédios de tijolinhos vermelhos,
     /// casas menta com telhado duas águas, torres azuis/amarelas e caixas d'água azuis).
     /// </summary>
-    public static Node3D CreateCityBuildingNode(bool isCityCenter, int seedHash)
+    public static Node3D CreateCityBuildingNode(bool isCityCenter, int seedHash, UrbanDistrictType districtType = UrbanDistrictType.Residential)
     {
         var root = new Node3D();
         var sidewalkMat = GetMat("d1d5db", 0.90f);
@@ -1745,7 +1775,7 @@ public static class ProceduralModels3D
         var whiteTrimMat = GetMat("f1f5f9", 0.80f);
         var darkRoofMat = GetMat("3f4451", 0.85f);
 
-        if (isCityCenter)
+        if (isCityCenter || districtType == UrbanDistrictType.Center)
         {
             // Torre Corporativa Branca & Preta + Caixa d'Água Azul icônica (images (6).jpg / (7).jpg)
             var towerMat = GetMat("f8fafc", 0.75f);
@@ -1764,7 +1794,9 @@ public static class ProceduralModels3D
             return root;
         }
 
-        int archetype = Math.Abs(seedHash) % 5;
+        int archetype = districtType == UrbanDistrictType.Commercial
+            ? (Math.Abs(seedHash) % 3 == 0 ? 2 : (Math.Abs(seedHash) % 3 == 1 ? 3 : 0))
+            : (Math.Abs(seedHash) % 3 == 0 ? 1 : (Math.Abs(seedHash) % 3 == 1 ? 4 : 0));
 
         if (archetype == 0)
         {

@@ -31,6 +31,7 @@ public static class SaveGameSerializer
         var biomes = new BiomeType[total];
         var roadLevels = new RoadTier[total];
         var occupantIds = new int[total];
+        var rivalOwnerIds = new int[total];
         var oceanMask = new bool[total];
 
         for (int x = 0; x < w; x++)
@@ -43,6 +44,7 @@ public static class SaveGameSerializer
                 biomes[idx] = cell.Biome;
                 roadLevels[idx] = cell.RoadLevel;
                 occupantIds[idx] = cell.OccupantId;
+                rivalOwnerIds[idx] = cell.RivalOwnerId;
                 oceanMask[idx] = world.OceanMask[x, y];
             }
         }
@@ -91,6 +93,7 @@ public static class SaveGameSerializer
             CellBiomes = biomes,
             CellRoadLevels = roadLevels,
             CellOccupantIds = occupantIds,
+            CellRivalOwnerIds = rivalOwnerIds,
             CellOceanMask = oceanMask,
             RoadNodes = world.RoadNodes.Select(n => new RoadNodeDto
             {
@@ -109,6 +112,9 @@ public static class SaveGameSerializer
                 PavementCondition = e.PavementCondition,
                 IsBlocked = e.IsBlocked,
                 IsAlpineBiome = e.IsAlpineBiome,
+                UrbanTrafficSpeedMultiplier = e.UrbanTrafficSpeedMultiplier,
+                OwnerRivalId = e.OwnerRivalId,
+                RivalTollFee = e.RivalTollFee,
                 RecentRevenue30d = e.RecentRevenue30d
             }).ToList(),
             Cities = world.Cities.Select(c => new CityDto
@@ -125,6 +131,7 @@ public static class SaveGameSerializer
                 ActiveBusServiceHours = c.ActiveBusServiceHours,
                 CapacityPerResource = c.Warehouse.CapacityPerResource,
                 UrbanTiles = c.UrbanTiles.Select(p => new GridPointDto { X = p.X, Y = p.Y }).ToList(),
+                DistrictTypes = c.UrbanDistricts.ToDictionary(kv => $"{kv.Key.X},{kv.Key.Y}", kv => (int)kv.Value),
                 StoredStock = c.Warehouse.StoredStock.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
                 DailyDemand = c.Warehouse.DailyDemand.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value)
             }).ToList(),
@@ -276,7 +283,17 @@ public static class SaveGameSerializer
                 RemainingHours = ct.RemainingHours,
                 ClaimedByRivalName = ct.ClaimedByRivalName,
                 IsSpecialConvoy = ct.IsSpecialConvoy,
-                FreightMultiplier = ct.FreightMultiplier
+                FreightMultiplier = ct.FreightMultiplier,
+                BaseDurationHours = ct.BaseDurationHours,
+                IsExclusiveAuction = ct.IsExclusiveAuction,
+                AuctionRemainingHours = ct.AuctionRemainingHours,
+                HasPlayerBid = ct.HasPlayerBid,
+                PlayerBidFreightMultiplier = ct.PlayerBidFreightMultiplier,
+                PlayerBidDurationHours = ct.PlayerBidDurationHours,
+                RivalBidCompanyName = ct.RivalBidCompanyName,
+                RivalBidFreightMultiplier = ct.RivalBidFreightMultiplier,
+                RivalBidDurationHours = ct.RivalBidDurationHours,
+                IsWonByPlayerAuction = ct.IsWonByPlayerAuction
             }).ToList(),
             TollStations = engine.TollStations.Select(ts => new TollStationDto
             {
@@ -297,7 +314,10 @@ public static class SaveGameSerializer
                 ColorHex = rv.ColorHex,
                 DeliveredVolume = rv.DeliveredVolume,
                 CompletedContracts = rv.CompletedContracts,
-                EstimatedRevenue = rv.EstimatedRevenue
+                EstimatedRevenue = rv.EstimatedRevenue,
+                OwnedRoadCount = rv.OwnedRoadCount,
+                TollRevenueCollected = rv.TollRevenueCollected,
+                AuctionsWon = rv.AuctionsWon
             }).ToList(),
             Research = new ResearchSaveDto
             {
@@ -340,7 +360,8 @@ public static class SaveGameSerializer
                 world.Grid[x, y] = new GridCell(x, y, data.CellTerrains[idx], data.CellBiomes[idx])
                 {
                     RoadLevel = data.CellRoadLevels[idx],
-                    OccupantId = data.CellOccupantIds[idx]
+                    OccupantId = data.CellOccupantIds[idx],
+                    RivalOwnerId = (data.CellRivalOwnerIds != null && idx < data.CellRivalOwnerIds.Length) ? data.CellRivalOwnerIds[idx] : 0
                 };
                 if (data.CellOceanMask != null && idx < data.CellOceanMask.Length)
                     world.OceanMask[x, y] = data.CellOceanMask[idx];
@@ -369,6 +390,9 @@ public static class SaveGameSerializer
                     PavementCondition = ed.PavementCondition ?? 100f,
                     IsBlocked = ed.IsBlocked,
                     IsAlpineBiome = ed.IsAlpineBiome,
+                    UrbanTrafficSpeedMultiplier = ed.UrbanTrafficSpeedMultiplier > 0f ? ed.UrbanTrafficSpeedMultiplier : 1.0f,
+                    OwnerRivalId = ed.OwnerRivalId,
+                    RivalTollFee = ed.RivalTollFee,
                     RecentRevenue30d = ed.RecentRevenue30d
                 };
                 from.OutgoingEdges.Add(edge);
@@ -390,8 +414,18 @@ public static class SaveGameSerializer
                 ActiveBusServiceHours = cd.ActiveBusServiceHours
             };
             city.UrbanTiles.Clear();
+            city.UrbanDistricts.Clear();
             foreach (var pt in cd.UrbanTiles)
                 city.UrbanTiles.Add((pt.X, pt.Y));
+            if (cd.DistrictTypes != null)
+            {
+                foreach (var kv in cd.DistrictTypes)
+                {
+                    var parts = kv.Key.Split(',');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out int dx) && int.TryParse(parts[1], out int dy))
+                        city.UrbanDistricts[(dx, dy)] = (UrbanDistrictType)kv.Value;
+                }
+            }
 
             city.Warehouse.CapacityPerResource = cd.CapacityPerResource;
             city.Warehouse.StoredStock.Clear();
@@ -599,8 +633,21 @@ public static class SaveGameSerializer
             if (cityMap.TryGetValue(cd.TargetCityId, out var c))
             {
                 float convoyMult = cd.FreightMultiplier > 0f ? cd.FreightMultiplier : 1.0f;
-                var contract = new LogisticsContract(cd.Id, cd.Title, c, cd.Resource, cd.RequiredAmount, cd.BonusRewardMoney, cd.BonusRewardXp, 240f, cd.IsSpecialConvoy, convoyMult);
-                contract.RestoreProgress(cd.DeliveredAmount, cd.RemainingHours, cd.ClaimedByRivalName);
+                float baseDur = cd.BaseDurationHours > 0f ? cd.BaseDurationHours : 240f;
+                var contract = new LogisticsContract(cd.Id, cd.Title, c, cd.Resource, cd.RequiredAmount, cd.BonusRewardMoney, cd.BonusRewardXp, baseDur, cd.IsSpecialConvoy, convoyMult);
+                contract.RestoreProgress(
+                    cd.DeliveredAmount,
+                    cd.RemainingHours,
+                    cd.ClaimedByRivalName,
+                    cd.IsExclusiveAuction,
+                    cd.AuctionRemainingHours,
+                    cd.HasPlayerBid,
+                    cd.PlayerBidFreightMultiplier,
+                    cd.PlayerBidDurationHours,
+                    cd.RivalBidCompanyName,
+                    cd.RivalBidFreightMultiplier,
+                    cd.RivalBidDurationHours,
+                    cd.IsWonByPlayerAuction);
                 engine.ActiveContracts.Add(contract);
             }
         }
@@ -626,7 +673,10 @@ public static class SaveGameSerializer
                 {
                     DeliveredVolume = rd.DeliveredVolume,
                     CompletedContracts = rd.CompletedContracts,
-                    EstimatedRevenue = rd.EstimatedRevenue
+                    EstimatedRevenue = rd.EstimatedRevenue,
+                    OwnedRoadCount = rd.OwnedRoadCount,
+                    TollRevenueCollected = rd.TollRevenueCollected,
+                    AuctionsWon = rd.AuctionsWon
                 });
             }
         }
@@ -739,6 +789,7 @@ public static class SaveGameSerializer
         public BiomeType[] CellBiomes { get; set; } = Array.Empty<BiomeType>();
         public RoadTier[] CellRoadLevels { get; set; } = Array.Empty<RoadTier>();
         public int[] CellOccupantIds { get; set; } = Array.Empty<int>();
+        public int[]? CellRivalOwnerIds { get; set; }
         public bool[]? CellOceanMask { get; set; }
         public List<RoadNodeDto> RoadNodes { get; set; } = new();
         public List<RoadEdgeDto> RoadEdges { get; set; } = new();
@@ -838,6 +889,9 @@ public static class SaveGameSerializer
         public float? PavementCondition { get; set; }
         public bool IsBlocked { get; set; }
         public bool IsAlpineBiome { get; set; }
+        public float UrbanTrafficSpeedMultiplier { get; set; } = 1.0f;
+        public int OwnerRivalId { get; set; }
+        public long RivalTollFee { get; set; }
         public long RecentRevenue30d { get; set; }
     }
 
@@ -861,6 +915,7 @@ public static class SaveGameSerializer
         public int ActiveBusServiceHours { get; set; }
         public int CapacityPerResource { get; set; }
         public List<GridPointDto> UrbanTiles { get; set; } = new();
+        public Dictionary<string, int>? DistrictTypes { get; set; }
         public Dictionary<string, int> StoredStock { get; set; } = new();
         public Dictionary<string, int> DailyDemand { get; set; } = new();
     }
@@ -1032,6 +1087,16 @@ public static class SaveGameSerializer
         public string? ClaimedByRivalName { get; set; }
         public bool IsSpecialConvoy { get; set; }
         public float FreightMultiplier { get; set; } = 1.0f;
+        public float BaseDurationHours { get; set; } = 240f;
+        public bool IsExclusiveAuction { get; set; }
+        public float AuctionRemainingHours { get; set; }
+        public bool HasPlayerBid { get; set; }
+        public float PlayerBidFreightMultiplier { get; set; } = 1.0f;
+        public float PlayerBidDurationHours { get; set; }
+        public string? RivalBidCompanyName { get; set; }
+        public float RivalBidFreightMultiplier { get; set; } = 1.0f;
+        public float RivalBidDurationHours { get; set; }
+        public bool IsWonByPlayerAuction { get; set; }
     }
 
     public sealed class TollStationDto
@@ -1055,6 +1120,9 @@ public static class SaveGameSerializer
         public int DeliveredVolume { get; set; }
         public int CompletedContracts { get; set; }
         public long EstimatedRevenue { get; set; }
+        public int OwnedRoadCount { get; set; }
+        public long TollRevenueCollected { get; set; }
+        public int AuctionsWon { get; set; }
     }
 
     public sealed class ResearchSaveDto

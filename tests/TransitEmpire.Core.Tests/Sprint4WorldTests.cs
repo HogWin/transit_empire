@@ -784,4 +784,157 @@ public class Sprint4WorldTests
         Assert.Equal(22, loadedBt.TotalPassengersServed);
         Assert.Equal(950, loadedBt.TotalTicketRevenue);
     }
+
+    [Fact]
+    public void LivingCities_ExpandDistricts_ApplyDowntownCongestion_AndRewardPeripheralRingRoad()
+    {
+        var world = CreateSimpleGridWorld(width: 24, height: 24);
+        var city = new City(1, "Metrópole Anel", 10, 10)
+        {
+            ExpansionLevel = 6,
+            Population = 620
+        };
+        city.SetUrbanTileDistrict(12, 10, UrbanDistrictType.Commercial);
+        city.SetUrbanTileDistrict(10, 12, UrbanDistrictType.Residential);
+        world.Cities.Add(city);
+
+        // Corredor central cortando ao lado do centro (<= 2 tiles) vs Anel Viário periférico (>= 3 tiles)
+        var nWest = new RoadNode(1, 6, 10);
+        var nDowntown = new RoadNode(2, 10, 12); // dist center = 2 -> centro congestionado
+        var nEast = new RoadNode(3, 14, 10);
+        var nRingNorth1 = new RoadNode(4, 6, 6);
+        var nRingNorth2 = new RoadNode(5, 14, 6);
+        world.RoadNodes.AddRange(new[] { nWest, nDowntown, nEast, nRingNorth1, nRingNorth2 });
+
+        var dt1 = LinkNodes(world, 1, nWest, nDowntown, RoadTier.Asphalt, 5f);
+        var dt2 = LinkNodes(world, 2, nDowntown, nEast, RoadTier.Asphalt, 5f);
+        var ring1 = LinkNodes(world, 3, nWest, nRingNorth1, RoadTier.Highway, 4f);
+        var ring2 = LinkNodes(world, 4, nRingNorth1, nRingNorth2, RoadTier.Highway, 8f);
+        var ring3 = LinkNodes(world, 5, nRingNorth2, nEast, RoadTier.Highway, 4f);
+
+        var engine = new SimulationEngine(world);
+
+        Assert.True(city.ResidentialTileCount > 0);
+        Assert.True(city.CommercialTileCount > 0);
+        Assert.True(city.GetDowntownTrafficSpeedMultiplier() < 0.70f);
+        Assert.True(dt1.UrbanTrafficSpeedMultiplier < 0.70f);
+        Assert.True(dt2.UrbanTrafficSpeedMultiplier < 0.70f);
+        Assert.Equal(1.0f, ring1.UrbanTrafficSpeedMultiplier, precision: 3);
+        Assert.Equal(1.0f, ring2.UrbanTrafficSpeedMultiplier, precision: 3);
+        Assert.Equal(1.0f, ring3.UrbanTrafficSpeedMultiplier, precision: 3);
+        Assert.True(engine.IsTileInCongestedDowntown(10, 12, out var congCity, out _));
+        Assert.Same(city, congCity);
+
+        // Pathfinder escolhe o anel viário periférico livre em vez do corte pelo centro congestionado
+        var route = engine.Pathfinder.FindFastestRoute(nWest, nEast);
+        Assert.NotNull(route);
+        Assert.Contains(ring2, route!);
+        Assert.DoesNotContain(dt1, route!);
+    }
+
+    [Fact]
+    public void RivalAuctions_PlayerBidWinsByTariffAndDeadline_AndAppliesTariffMultiplier()
+    {
+        var world = CreateSimpleGridWorld(width: 16, height: 16);
+        var city = new City(1, "Florianópolis", 8, 8);
+        world.Cities.Add(city);
+
+        var engine = new SimulationEngine(world);
+        engine.Player.Balance = 100_000;
+
+        // 1) Leilão sem lance competitivo do jogador vai para o rival
+        var lostAuction = engine.CreateExclusiveAuctionContract(city, ResourceType.Steel, amount: 40, baseDurationHours: 160f, auctionHours: 4f);
+        Assert.True(lostAuction.IsAuctionOpen);
+        Assert.NotNull(lostAuction.RivalBidCompanyName);
+
+        for (int i = 0; i < 6; i++)
+            engine.Tick(1.0f);
+
+        Assert.True(lostAuction.IsLostToRival);
+        Assert.True(engine.Rivals.Sum(r => r.AuctionsWon) >= 1);
+
+        // 2) Jogador envia lance competitivo (tarifa 80%, prazo 100h) e vence o leilão
+        var wonAuction = engine.CreateExclusiveAuctionContract(city, ResourceType.Steel, amount: 40, baseDurationHours: 180f, auctionHours: 3f);
+        Assert.True(engine.PlacePlayerAuctionBid(wonAuction.Id, 0.80f, 100f, out string bidMsg));
+        Assert.Contains("liderança", bidMsg);
+
+        for (int i = 0; i < 5; i++)
+            engine.Tick(1.0f);
+
+        Assert.True(wonAuction.IsWonByPlayerAuction);
+        Assert.False(wonAuction.IsLostToRival);
+        Assert.Equal(0.80f, wonAuction.FreightMultiplier, precision: 2);
+    }
+
+    [Fact]
+    public void RivalTollRoads_ChargePlayerTolls_AvoidedByCompetitiveBypass_AndSaveRoundtrip()
+    {
+        var world = CreateSimpleGridWorld(width: 20, height: 14);
+        var city = new City(1, "Curitiba", 16, 6);
+        world.Cities.Add(city);
+        var nStart = new RoadNode(1, 2, 6);
+        var nEnd = new RoadNode(2, 12, 6);
+        world.Grid[2, 6].RoadLevel = RoadTier.Asphalt;
+        world.Grid[12, 6].RoadLevel = RoadTier.Asphalt;
+        world.RoadNodes.AddRange(new[] { nStart, nEnd });
+
+        var engine = new SimulationEngine(world);
+        engine.Player.Balance = 120_000;
+        var rival = engine.Rivals[0];
+
+        var rivalEdges = engine.TryBuildRivalTollCorridor(rival, nStart, nEnd, tollFee: 220L);
+        Assert.NotEmpty(rivalEdges);
+        Assert.True(rival.OwnedRoadCount > 0);
+        Assert.True(world.Grid[5, 6].RivalOwnerId == rival.Id);
+
+        // Antes de construir um desvio, o caminhão usa o corredor rival e paga R$ 220 de pedágio ao concorrente
+        var directPath = engine.Pathfinder.FindFastestRoute(nStart, nEnd)!;
+        Assert.Contains(directPath, e => e.OwnerRivalId == rival.Id);
+
+        var garage = engine.BuildGarage(2, 8, "Garagem Base")!;
+        var spec = ProgressionManager.AvailableTruckModels[1];
+        var truck = engine.BuyTruck(garage, spec)!;
+        truck.AssignPath(directPath);
+        truck.LoadedCargoType = ResourceType.Food;
+        truck.LoadedCargoAmount = 20;
+        truck.Status = TruckStatus.TravelingToDelivery;
+        truck.AssignedTargetCity = city;
+
+        for (int t = 0; t < 40 && truck.LoadedCargoAmount > 0; t++)
+            engine.Tick(0.25f);
+
+        Assert.Equal(220L, rival.TollRevenueCollected);
+        Assert.Equal(220L, engine.Financials.Lifetime.RivalTollExpense);
+
+        // Constrói um desvio competitivo paralelo gratuito (via y = 3) e verifica que o Pathfinder evita o pedágio rival
+        var nByp1 = new RoadNode(10, 2, 3);
+        var nByp2 = new RoadNode(11, 12, 3);
+        world.RoadNodes.AddRange(new[] { nByp1, nByp2 });
+        LinkNodes(world, 90, nStart, nByp1, RoadTier.Highway, 3f);
+        LinkNodes(world, 91, nByp1, nByp2, RoadTier.Highway, 10f);
+        LinkNodes(world, 92, nByp2, nEnd, RoadTier.Highway, 3f);
+        engine.Pathfinder.InvalidateCache();
+
+        var bypassRoute = engine.Pathfinder.FindFastestRoute(nStart, nEnd)!;
+        Assert.All(bypassRoute, e => Assert.Equal(0, e.OwnerRivalId));
+
+        // Save/Load preserva Sprint F4 completo
+        var auction = engine.CreateExclusiveAuctionContract(city, ResourceType.Machinery, 30, 160f, 12f);
+        engine.PlacePlayerAuctionBid(auction.Id, 0.82f, 110f, out _);
+
+        string json = SaveGameSerializer.SerializeToJson(engine, seed: 404);
+        var (loaded, _) = SaveGameSerializer.DeserializeFromJson(json);
+
+        Assert.Equal(220L, loaded.Financials.Lifetime.RivalTollExpense);
+        var loadedRival = loaded.Rivals.First(r => r.Id == rival.Id);
+        Assert.Equal(220L, loadedRival.TollRevenueCollected);
+        Assert.True(loadedRival.OwnedRoadCount > 0);
+        Assert.Equal(rival.Id, loaded.World.Grid[5, 6].RivalOwnerId);
+        Assert.Contains(loaded.World.RoadEdges, e => e.OwnerRivalId == rival.Id && e.RivalTollFee == 220L);
+        var loadedAuction = Assert.Single(loaded.ActiveContracts.Where(c => c.IsExclusiveAuction));
+        Assert.True(loadedAuction.HasPlayerBid);
+        Assert.Equal(0.82f, loadedAuction.PlayerBidFreightMultiplier, precision: 2);
+        var loadedCity = Assert.Single(loaded.World.Cities);
+        Assert.Equal(UrbanDistrictType.Center, loadedCity.GetDistrictType(loadedCity.CenterX, loadedCity.CenterY));
+    }
 }

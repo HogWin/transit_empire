@@ -135,11 +135,11 @@
 
 ---
 
-### ⏳ Sprint F4 — Cidades Vivas & Concorrência Ativa com Rivais (`Mundo & Estratégia`) — *Planejado*
+### ✅ Sprint F4 — Cidades Vivas & Concorrência Ativa com Rivais (`Mundo & Estratégia`) — *Concluído*
 *Transforma o crescimento urbano e as empresas rivais em pressões reais de planejamento rodoviário.*
-- [ ] **1. Expansão Física por Bairros & Anéis Viários:**
+- [x] **1. Expansão Física por Bairros & Anéis Viários:**
   - Cidades prósperas expandem quarteirões residenciais/comerciais adjacentes e aplicam penalidade de trânsito pesado no centro, incentivando anéis viários periféricos e contornos expressos.
-- [ ] **2. Guerra Econômica com `RivalCompany`:**
+- [x] **2. Guerra Econômica com `RivalCompany`:**
   - Rivais disputam contratos exclusivos em leilão de tarifa/prazo e constroem trechos próprios com pedágio ativo, cabendo ao jogador pagar a tarifa rival ou projetar um desvio competitivo.
 
 ---
@@ -162,5 +162,5 @@
 | **Sprint F1** | **Escalabilidade, Settings & Tutorial** (`MultiMesh`, `80x80/100x100`, `settings.json`) | Base técnica e performance para suportar mapas maiores e retenção inicial | ✅ Concluído |
 | **Sprint F2** | **Automação de Frota** (`Clone`, `Wait Full Load`, `Headway`, `Auto-Replace`) | Elimina microgestão antes de ampliar cadeias de carga e número de linhas | ✅ Concluído |
 | **Sprint F3** | **Economia & Passageiros** (`Ônibus`, `Tier 3`, `Combustível em Hubs`) | Enriquece fluxos econômicos aproveitando a automação da F2 | ✅ Concluído |
-| **Sprint F4** | **Cidades Vivas & Guerra Rival** (`Anéis Viários`, `Leilões & Pedágio Rival`) | Cria desafios dinâmicos de malha e competição sobre a economia completa | ⏳ Planejado |
+| **Sprint F4** | **Cidades Vivas & Guerra Rival** (`Anéis Viários`, `Leilões & Pedágio Rival`) | Cria desafios dinâmicos de malha e competição sobre a economia completa | ✅ Concluído |
 | **Sprint F5** | **Ferrovias & Intermodal** (`Trilhos`, `Block Signals`, `Hub Rodoferroviário`) | Expansão *endgame* conectando coleta rodoviária, trens pesados e portos | ⏳ Planejado |

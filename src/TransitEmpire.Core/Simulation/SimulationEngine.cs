@@ -319,7 +319,7 @@ public class SimulationEngine
         float auctionHours = 24f)
     {
         EnsureRivalsInitialized();
-        long bonusMoney = (long)Math.Round(amount * 48L);
+        long bonusMoney = amount * 48L;
         int bonusXp = amount * 16;
         var contract = new LogisticsContract(
             _nextContractId++,
@@ -2753,7 +2753,7 @@ public class SimulationEngine
         if (targetTier > Research.GetMaxUnlockedRoadTier(Player.Level))
             return 0;
 
-        if (World.Grid[startX, startY].RoadLevel == RoadTier.None)
+        if (World.Grid[startX, startY].RoadLevel == RoadTier.None || World.Grid[startX, startY].RivalOwnerId > 0)
             return 0;
 
         // Busca em largura (BFS) pelas células de estrada conectadas que ainda estão abaixo do targetTier
@@ -2770,8 +2770,8 @@ public class SimulationEngine
         while (queue.Count > 0 && toUpgrade.Count < maxTiles)
         {
             var (cx, cy) = queue.Dequeue();
-            var currentTier = World.Grid[cx, cy].RoadLevel;
-            if (currentTier != RoadTier.None && currentTier < targetTier)
+            var currentCell = World.Grid[cx, cy];
+            if (currentCell.RoadLevel != RoadTier.None && currentCell.RoadLevel < targetTier && currentCell.RivalOwnerId == 0)
             {
                 toUpgrade.Add((cx, cy));
             }
@@ -3798,9 +3798,52 @@ public class SimulationEngine
         return station;
     }
 
+    private void CollectRivalTollsForTrip(Truck truck)
+    {
+        if (truck.CurrentTripEdges.Count == 0 || Rivals.Count == 0)
+            return;
+
+        Dictionary<int, long>? tollByRival = null;
+        foreach (var edge in truck.CurrentTripEdges)
+        {
+            if (edge.OwnerRivalId <= 0 || edge.RivalTollFee <= 0)
+                continue;
+
+            tollByRival ??= new Dictionary<int, long>();
+            long existing = tollByRival.GetValueOrDefault(edge.OwnerRivalId, 0L);
+            if (edge.RivalTollFee > existing)
+                tollByRival[edge.OwnerRivalId] = edge.RivalTollFee;
+        }
+
+        if (tollByRival == null)
+            return;
+
+        foreach (var (rivalId, fee) in tollByRival)
+        {
+            long paid = Math.Min(Player.Balance, fee);
+            if (paid <= 0)
+                continue;
+
+            Player.Balance -= paid;
+            Financials.RecordRivalTollExpense(paid);
+            var rival = Rivals.FirstOrDefault(r => r.Id == rivalId);
+            if (rival != null)
+            {
+                rival.TollRevenueCollected += paid;
+                rival.EstimatedRevenue += paid;
+                OnRivalTollPaid?.Invoke(truck, rival, paid);
+            }
+        }
+    }
+
     private void CollectTollAndWeighBonusForTrip(Truck truck)
     {
-        if (TollStations.Count == 0 || truck.CurrentTripEdges.Count == 0)
+        if (truck.CurrentTripEdges.Count == 0)
+            return;
+
+        CollectRivalTollsForTrip(truck);
+
+        if (TollStations.Count == 0)
             return;
 
         int passedStationNodeId = -1;
@@ -3915,11 +3958,35 @@ public class SimulationEngine
             if (contract.IsCompleted || contract.IsExpired || contract.IsLostToRival)
                 continue;
 
+            if (contract.IsExclusiveAuction)
+            {
+                if (contract.AuctionRemainingHours <= 0f && !contract.IsWonByPlayerAuction)
+                    ResolveContractAuction(contract);
+                continue;
+            }
+
             if (contract.RemainingHours <= 72f && contract.CompletionPercentage < 0.25f && _rng.NextDouble() < 0.22)
             {
                 var winner = Rivals[_rng.Next(Rivals.Count)];
                 ClaimContractForRival(contract, winner);
             }
+        }
+
+        // Abre periodicamente Leilão Exclusivo de Tarifa/Prazo (Sprint F4)
+        bool hasOpenAuction = ActiveContracts.Any(c => c.IsAuctionOpen);
+        if (!hasOpenAuction && World.Cities.Count > 0 && _rng.NextDouble() < 0.40)
+        {
+            var auctionCity = World.Cities[_rng.Next(World.Cities.Count)];
+            ResourceType[] auctionCargos = { ResourceType.Steel, ResourceType.Goods, ResourceType.Fuel, ResourceType.Machinery };
+            CreateExclusiveAuctionContract(auctionCity, auctionCargos[_rng.Next(auctionCargos.Length)], amount: 45);
+        }
+
+        // Rivais expandem trechos próprios pedagiados conectando corredores regionais (Sprint F4)
+        int totalRivalStreches = Rivals.Sum(r => r.OwnedRoadCount);
+        if (totalRivalStreches < 18 && World.RoadNodes.Count >= 4 && _rng.NextDouble() < 0.30)
+        {
+            var rival = Rivals[_rng.Next(Rivals.Count)];
+            TryBuildRivalTollCorridor(rival, tollFee: 160 + _rng.Next(0, 5) * 20L);
         }
 
         // Emite periodicamente contrato de Comboio Especial / Carga Indivisível (3x recompensa)
@@ -3953,6 +4020,184 @@ public class SimulationEngine
             CreateContractForCity(nextCity);
         }
         return true;
+    }
+
+    public long GetRivalTollAtTile(int x, int y, out RivalCompany? owner)
+    {
+        owner = null;
+        if (!IsTileInBounds(x, y))
+            return 0L;
+
+        int ownerId = World.Grid[x, y].RivalOwnerId;
+        if (ownerId <= 0)
+            return 0L;
+
+        owner = Rivals.FirstOrDefault(r => r.Id == ownerId);
+        var edge = GetEdgesTouchingTile(x, y).FirstOrDefault(e => e.OwnerRivalId == ownerId && e.RivalTollFee > 0);
+        return edge?.RivalTollFee ?? 180L;
+    }
+
+    /// <summary>
+    /// Permite a uma transportadora rival construir um atalho/trecho rodoviário próprio com pedágio ativo entre dois nós.
+    /// </summary>
+    public List<RoadEdge> TryBuildRivalTollCorridor(
+        RivalCompany rival,
+        RoadNode? fromNode = null,
+        RoadNode? toNode = null,
+        long tollFee = 180L)
+    {
+        EnsureRivalsInitialized();
+        var createdEdges = new List<RoadEdge>();
+        int w = World.Grid.GetLength(0);
+        int h = World.Grid.GetLength(1);
+
+        if (fromNode == null || toNode == null)
+        {
+            var candidates = World.RoadNodes.OrderBy(_ => _rng.Next()).Take(24).ToList();
+            for (int i = 0; i < candidates.Count && fromNode == null; i++)
+            {
+                for (int j = i + 1; j < candidates.Count; j++)
+                {
+                    int manh = Math.Abs(candidates[i].GridX - candidates[j].GridX) + Math.Abs(candidates[i].GridY - candidates[j].GridY);
+                    if (manh is >= 4 and <= 11 &&
+                        candidates[i].OutgoingEdges.All(e => e.ToNode.Id != candidates[j].Id))
+                    {
+                        fromNode = candidates[i];
+                        toNode = candidates[j];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (fromNode == null || toNode == null || fromNode.Id == toNode.Id)
+            return createdEdges;
+
+        List<(int X, int Y)>? chosenTrace = TryTraceRivalCorridor(fromNode.GridX, fromNode.GridY, toNode.GridX, toNode.GridY, xFirst: true, w, h)
+            ?? TryTraceRivalCorridor(fromNode.GridX, fromNode.GridY, toNode.GridX, toNode.GridY, xFirst: false, w, h);
+
+        if (chosenTrace == null || chosenTrace.Count < 2)
+            return createdEdges;
+
+        int builtNewTiles = 0;
+        RoadNode prevNode = fromNode;
+
+        for (int i = 1; i < chosenTrace.Count; i++)
+        {
+            var (tx, ty) = chosenTrace[i];
+            ref var cell = ref World.Grid[tx, ty];
+            if (!cell.HasRoad)
+            {
+                cell.RoadLevel = RoadTier.Asphalt;
+                cell.RivalOwnerId = rival.Id;
+                builtNewTiles++;
+            }
+
+            var curNode = i == chosenTrace.Count - 1
+                ? toNode
+                : (GetRoadNodeAt(tx, ty) ?? CreateAndRegisterRoadNode(tx, ty));
+
+            if (!prevNode.OutgoingEdges.Any(e => e.ToNode.Id == curNode.Id))
+            {
+                bool isRivalSeg = cell.RivalOwnerId == rival.Id || World.Grid[prevNode.GridX, prevNode.GridY].RivalOwnerId == rival.Id;
+                int segOwner = isRivalSeg ? rival.Id : 0;
+                long segFee = isRivalSeg ? tollFee : 0L;
+                float dist = MathF.Max(1f, MathF.Abs(curNode.GridX - prevNode.GridX) + MathF.Abs(curNode.GridY - prevNode.GridY));
+                bool alpine = IsNodeAlpine(prevNode, w, h) || IsNodeAlpine(curNode, w, h);
+                bool hillOrMt = IsNodeHillOrMountain(prevNode, w, h) || IsNodeHillOrMountain(curNode, w, h);
+
+                var fwd = new RoadEdge(_nextRoadEdgeId++, prevNode, curNode, RoadTier.Asphalt, dist)
+                {
+                    IsAlpineBiome = alpine,
+                    IsHillOrMountain = hillOrMt,
+                    OwnerRivalId = segOwner,
+                    RivalTollFee = segFee
+                };
+                var rev = new RoadEdge(_nextRoadEdgeId++, curNode, prevNode, RoadTier.Asphalt, dist)
+                {
+                    IsAlpineBiome = alpine,
+                    IsHillOrMountain = hillOrMt,
+                    OwnerRivalId = segOwner,
+                    RivalTollFee = segFee
+                };
+                prevNode.OutgoingEdges.Add(fwd);
+                curNode.OutgoingEdges.Add(rev);
+                World.RoadEdges.Add(fwd);
+                World.RoadEdges.Add(rev);
+                if (isRivalSeg)
+                {
+                    createdEdges.Add(fwd);
+                    createdEdges.Add(rev);
+                }
+            }
+
+            prevNode = curNode;
+        }
+
+        if (builtNewTiles > 0 || createdEdges.Count > 0)
+        {
+            rival.OwnedRoadCount += builtNewTiles;
+            RebuildRoadSpatialCache();
+            RefreshUrbanTrafficPenalties();
+            Pathfinder.InvalidateCache();
+            OnRivalRoadBuilt?.Invoke(rival, createdEdges, tollFee);
+        }
+
+        return createdEdges;
+    }
+
+    private RoadNode CreateAndRegisterRoadNode(int x, int y)
+    {
+        var node = new RoadNode(_nextRoadNodeId++, x, y);
+        World.RoadNodes.Add(node);
+        _roadNodeByGrid[(x, y)] = node;
+        return node;
+    }
+
+    private List<(int X, int Y)>? TryTraceRivalCorridor(int x0, int y0, int x1, int y1, bool xFirst, int w, int h)
+    {
+        var path = new List<(int X, int Y)> { (x0, y0) };
+        int cx = x0;
+        int cy = y0;
+
+        bool StepTo(int nx, int ny)
+        {
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                return false;
+            var c = World.Grid[nx, ny];
+            if (World.OceanMask[nx, ny] || (!c.HasRoad && (c.OccupantId != 0 || c.Terrain == TerrainType.Water)))
+                return false;
+            cx = nx;
+            cy = ny;
+            path.Add((cx, cy));
+            return true;
+        }
+
+        if (xFirst)
+        {
+            while (cx != x1)
+                if (!StepTo(cx + Math.Sign(x1 - cx), cy)) return null;
+            while (cy != y1)
+                if (!StepTo(cx, cy + Math.Sign(y1 - cy))) return null;
+        }
+        else
+        {
+            while (cy != y1)
+                if (!StepTo(cx, cy + Math.Sign(y1 - cy))) return null;
+            while (cx != x1)
+                if (!StepTo(cx + Math.Sign(x1 - cx), cy)) return null;
+        }
+
+        bool hasBuildSpace = false;
+        for (int i = 1; i < path.Count - 1; i++)
+        {
+            if (!World.Grid[path[i].X, path[i].Y].HasRoad)
+            {
+                hasBuildSpace = true;
+                break;
+            }
+        }
+        return hasBuildSpace || path.Count == 2 ? path : null;
     }
 
     /// <summary>
@@ -4254,4 +4499,6 @@ public readonly record struct IndustrialConnections(
     bool HeavyBridgeE,
     bool HeavyBridgeW,
     int RoadDockCount,
-    int FacilityBri
+    int FacilityBridgeCount,
+    int NearbyHubCount,
+    int DailyProductionBonus);

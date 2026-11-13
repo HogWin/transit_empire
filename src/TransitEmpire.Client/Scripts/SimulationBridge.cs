@@ -691,6 +691,11 @@ public class SimulationBridge
         return Engine.BuildTollStation(x, y, out statusMessage);
     }
 
+    public bool PlacePlayerAuctionBid(int contractId, float bidFreightMultiplier, float bidDurationHours, out string statusMessage)
+    {
+        return Engine.PlacePlayerAuctionBid(contractId, bidFreightMultiplier, bidDurationHours, out statusMessage);
+    }
+
     public void SaveToFile(string absolutePath)
     {
         SaveGameSerializer.SaveToFile(absolutePath, Engine, Seed);
