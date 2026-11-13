@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-3 select-none">
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+    <!-- Top Header & Model Selector Tabs -->
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span id="truck-badge" class="px-2 py-0.5 text-xs font-bold rounded bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)]">
+            4x2 Clássico 113H Série 3 • Nível 1
+          </span>
+          <h2 id="truck-title" class="text-[var(--foreground)] font-bold text-base">
+            🚚 Scania 113H TopLine 360
+          </h2>
+        </div>
+        <p id="truck-desc" class="text-[var(--muted-foreground)] text-xs mt-0.5">
+          Réplica 1:1 idêntica ao jogo principal • Asfalto texturizado, lanternas traseiras triplas e faróis noturnos volumétricos.
+        </p>
+      </div>
+
+      <!-- 5 Famous Model Buttons -->
+      <div class="flex items-center gap-1 bg-[var(--background)] p-1 rounded-lg border border-[var(--border)] flex-wrap">
+        <button onclick="selectModel(1)" id="btn-m1" class="px-2.5 py-1 rounded text-xs font-semibold transition">1. Ford F-4000</button>
+        <button onclick="selectModel(2)" id="btn-m2" class="px-2.5 py-1 rounded text-xs font-semibold transition">2. Scania 113H</button>
+        <button onclick="selectModel(3)" id="btn-m3" class="px-2.5 py-1 rounded text-xs font-semibold transition">3. MB L-1620</button>
+        <button onclick="selectModel(4)" id="btn-m4" class="px-2.5 py-1 rounded text-xs font-semibold transition">4. Volvo FH 540</button>
+        <button onclick="selectModel(5)" id="btn-m5" class="px-2.5 py-1 rounded text-xs font-semibold transition">5. Peterbilt 389</button>
+      </div>
+    </div>
+
+    <!-- 3D WebGL Turntable Canvas + Overlay Specs -->
+    <div class="relative rounded-lg overflow-hidden border border-[var(--border)] bg-[#0b1120]">
+      <canvas id="turntable" width="840" height="290" class="w-full h-[270px] cursor-grab active:cursor-grabbing block"></canvas>
+
+      <!-- Top-left Specs Pill -->
+      <div class="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5 pointer-events-none">
+        <div class="bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-md px-2.5 py-1 text-xs">
+          <span class="text-[var(--muted-foreground)]">Capacidade:</span>
+          <strong id="spec-cap" class="text-[var(--foreground)] ml-1">28 un.</strong>
+        </div>
+        <div class="bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-md px-2.5 py-1 text-xs">
+          <span class="text-[var(--muted-foreground)]">Vel. Máx:</span>
+          <strong id="spec-speed" class="text-[var(--foreground)] ml-1">75 km/h</strong>
+        </div>
+        <div class="bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-md px-2.5 py-1 text-xs">
+          <span class="text-[var(--muted-foreground)]">Rodagem:</span>
+          <strong id="spec-axles" class="text-[var(--foreground)] ml-1">295/80 R22.5 (10 Furos)</strong>
+        </div>
+        <div class="bg-[var(--card)]/90 backdrop-blur border border-[var(--border)] rounded-md px-2.5 py-1 text-xs">
+          <span class="text-[var(--muted-foreground)]">Preço:</span>
+          <strong id="spec-price" class="text-[var(--foreground)] ml-1">R$ 12.000</strong>
+        </div>
+      </div>
+
+      <!-- Bottom-right Hint -->
+      <div class="absolute bottom-2 right-2.5 bg-[var(--card)]/85 backdrop-blur border border-[var(--border)] rounded px-2.5 py-0.5 text-xs text-[var(--muted-foreground)] pointer-events-none">
+        🖱️ Arraste para girar 360° • Scroll para Zoom • Réplica 100% fiel ao modelo do jogo
+      </div>
+    </div>
+
+    <!-- Bottom Interactive Controls Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2.5 border-t border-[var(--border)] text-xs">
+      <!-- Cargo Selector -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span class="text-[var(--muted-foreground)] font-medium">📦 Carga:</span>
+        <button onclick="setCargo('Grãos')" id="cg-Grãos" class="px-2 py-1 rounded border border-[var(--border)] transition">🌾 Grãos</button>
+        <button onclick="setCargo('Madeira Bruta')" id="cg-Madeira Bruta" class="px-2 py-1 rounded border border-[var(--border)] transition">🪵 Madeira</button>
+        <button onclick="setCargo('Combustível')" id="cg-Combustível" class="px-2 py-1 rounded border border-[var(--border)] transition">🛢️ Combustível</button>
+        <button onclick="setCargo('Materiais de Construção')" id="cg-Materiais de Construção" class="px-2 py-1 rounded border border-[var(--border)] transition">🧱 Construção</button>
+        <button onclick="setCargo('Alimentos Processados')" id="cg-Alimentos Processados" class="px-2 py-1 rounded border border-[var(--border)] transition">🥫 Alimentos</button>
+        <button onclick="setCargo('Vazio')" id="cg-Vazio" class="px-2 py-1 rounded border border-[var(--border)] transition">Vazio</button>
+      </div>
+
+      <!-- Livery, Steering & Night Toggles -->
+      <div class="flex items-center gap-1.5">
+        <button onclick="toggleSteerDemo()" id="btn-steer" class="px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)] font-medium">
+          🛞 Direção: Reta
+        </button>
+        <button onclick="togglePaint()" id="btn-paint" class="px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)] font-medium">
+          🎨 Pintura #1
+        </button>
+        <button onclick="toggleNight()" id="btn-night" class="px-2.5 py-1 rounded border border-[var(--border)] bg-[var(--secondary)] text-[var(--secondary-foreground)] font-medium">
+          🌙 Faróis / Noite
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SPECS = {
+      1: {
+        name: "🚐 Utilitário F-4000 Carga Seca",
+        badge: "4x2 Ford F-4000 • Nível 1",
+        desc: "Réplica exata do jogo: capô Ford Série F com Power Dome, giroflex âmbar, lanternas traseiras triplas e carroceria maciça.",
+        cap: "12 un.", speed: "65 km/h", axles: "4x2 (Rodado Duplo)", price: "R$ 5.000",
+        camDist: 3.35, hlX: 1.25, hlY: 0.58, hlZ: 0.26, rearX: -0.94
+      },
+      2: {
+        name: "🚚 Scania 113H TopLine 360",
+        badge: "4x2 Clássico 113H Série 3 • Nível 1",
+        desc: "Réplica exata do jogo: Azul Celeste com faixas anos 90 (Rosa/Roxo/Azul), neblinas âmbar, lanternas triplas e carroceria Guerra.",
+        cap: "28 un.", speed: "75 km/h", axles: "295/80 R22.5 (Traseiro Duplo)", price: "R$ 12.000",
+        camDist: 3.75, hlX: 1.43, hlY: 0.38, hlZ: 0.28, rearX: -1.29, fogY: 0.29, fogZ: 0.16
+      },
+      3: {
+        name: "🚛 Mercedes-Benz L-1620 Bicudo",
+        badge: "4x2 Rei da Estrada • Nível 2",
+        desc: "Réplica exata do jogo: capô inclinado MB 1620, grade preta com barra cromada, 2 cornetas no teto e lanternas traseiras triplas.",
+        cap: "45 un.", speed: "80 km/h", axles: "4x2 (6 Pneus R22.5)", price: "R$ 24.000",
+        camDist: 3.85, hlX: 1.39, hlY: 0.38, hlZ: 0.28, rearX: -1.36
+      },
+      4: {
+        name: "🚜 Volvo FH 540 Globetrotter 6x2",
+        badge: "6x2 Cara-Chata Globetrotter • Nível 3",
+        desc: "Réplica exata do jogo: testeira iluminada GLOBETROTTER, 4 milhas LED de teto, saias integrais Full Side-Skirts e lanternas triplas.",
+        cap: "80 un.", speed: "85 km/h", axles: "6x2 (10 Pneus R22.5)", price: "R$ 48.000",
+        camDist: 4.25, hlX: 1.31, hlY: 0.42, hlZ: 0.34, rearX: -1.63, roofY: 1.56
+      },
+      5: {
+        name: "🏁 Peterbilt 389 Bi-Trem King",
+        badge: "Bi-Trem 5 Eixos American King • Nível 4",
+        desc: "Réplica exata do jogo: Preto Ônix & Faixa Dourada com capô longo, bullbar cromado, chaminés duplas e 2 semirreboques Guerra.",
+        cap: "150 un.", speed: "95 km/h", axles: "5 Eixos (18 Pneus R22.5)", price: "R$ 95.000",
+        camDist: 5.35, hlX: 1.79, hlY: 0.56, hlZ: 0.34, rearX: -2.37
+      }
+    };
+
+    let currentSpecId = 2;
+    let currentCargo = 'Combustível';
+    let paintVariant = 0;
+    let nightMode = false;
+    let steerDemo = false;
+    let yaw = 0.58;
+    let pitch = 0.28;
+    let zoomFactor = 1.0;
+    let wheelAngle = 0;
+    let roadScroll = 0;
+    let clockTime = 0;
+
+    const canvas = document.getElementById('turntable');
+    const gl = canvas.getContext('webgl', { antialias: true, depth: true, alpha: false });
+
+    let dragging = false, lastX = 0, lastY = 0;
+    canvas.addEventListener('pointerdown', e => {
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      yaw -= dx * 0.011;
+      pitch = Math.max(0.06, Math.min(0.85, pitch + dy * 0.008));
+    });
+    canvas.addEventListener('pointerup', () => { dragging = false; });
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      zoomFactor = Math.max(0.65, Math.min(1.45, zoomFactor + e.deltaY * 0.0008));
+    }, { passive: false });
+
+    // ============================================================================
+    // 🎨 SHADER WEBGL: Z-BUFFER + TEXTURA DE ASFALTO + SPOTLIGHTS NOTURNOS REAIS
+    // ============================================================================
+    const vsSource = `
+      attribute vec3 aPos;
+      attribute vec3 aNorm;
+      attribute vec3 aColor;
+      attribute vec2 aMat; // x = metalness/alpha, y = emissive/mode flag
+      uniform mat4 uProj;
+      uniform mat4 uView;
+      varying vec3 vNorm;
+      varying vec3 vWorldPos;
+      varying vec3 vColor;
+      varying vec2 vMat;
+      void main() {
+        vWorldPos = aPos;
+        vNorm = aNorm;
+        vColor = aColor;
+        vMat = aMat;
+        gl_Position = uProj * uView * vec4(aPos, 1.0);
+      }
+    `;
+
+    const fsSource = `
+      precision mediump float;
+      varying vec3 vNorm;
+      varying vec3 vWorldPos;
+      varying vec3 vColor;
+      varying vec2 vMat;
+      uniform vec3 uCamPos;
+      uniform float uNight;
+      uniform float uPass;      // 0.0 = opaque mesh pass, 1.0 = volumetric transparent beam pass
+      uniform vec3 uHlCfg;      // x = frontX, y = hlY, z = hlZ
+      uniform float uRearX;
+      uniform float uSteerYaw;
+      uniform float uPulse;
+
+      void main() {
+        // PASS 1: Feixes Volumétricos 3D Translúcidos dos Faróis Dianteiros (Noite)
+        if (uPass > 0.5) {
+          gl_FragColor = vec4(vColor * uPulse, vMat.x * uPulse);
+          return;
+        }
+
+        vec3 N = normalize(vNorm);
+        vec3 L1 = normalize(vec3(0.55, 0.85, 0.48));
+        vec3 L2 = normalize(vec3(-0.60, 0.35, -0.55));
+        vec3 V = normalize(uCamPos - vWorldPos);
+        vec3 H = normalize(L1 + V);
+
+        vec3 baseCol = vColor;
+        float metal = vMat.x;
+        float emissive = max(0.0, vMat.y);
+
+        // Micro-granulação procedural de asfalto rodoviário para o piso do showroom (vMat.y < -0.5)
+        if (vMat.y < -0.5) {
+          float grain = fract(sin(dot(floor(vWorldPos.xz * 85.0), vec2(12.9898, 78.233))) * 43758.5453);
+          float laneWear = exp(-pow(vWorldPos.z * 2.1, 2.0)) * 0.025;
+          baseCol += vec3((grain - 0.5) * 0.032 - laneWear);
+        }
+
+        float diff1 = max(dot(N, L1), 0.0);
+        float diff2 = max(dot(N, L2), 0.0) * 0.32;
+        float hemi = 0.5 + 0.5 * N.y;
+
+        float ambientStrength = mix(0.46, 0.16, uNight);
+        float sunStrength = mix(0.74, 0.18, uNight);
+        vec3 skyAmbient = mix(vec3(0.18, 0.22, 0.30), vec3(0.75, 0.84, 0.96), hemi) * ambientStrength;
+
+        float spec = pow(max(dot(N, H), 0.0), mix(18.0, 64.0, metal)) * metal * mix(0.55, 0.22, uNight);
+        vec3 litColor = baseCol * (skyAmbient + (diff1 + diff2) * sunStrength) + vec3(spec);
+
+        // Iluminação Dinâmica dos Faróis Dianteiros (SpotLights Duplos) e Lanternas Traseiras no Chão à Noite
+        if (uNight > 0.5) {
+          vec3 beamDir = normalize(vec3(cos(uSteerYaw * 0.55), -0.115, sin(uSteerYaw * 0.55)));
+          float spotTotal = 0.0;
+          for (int i = 0; i < 2; i++) {
+            float sSign = (i == 0) ? -1.0 : 1.0;
+            vec3 hlPos = vec3(uHlCfg.x, uHlCfg.y, sSign * uHlCfg.z);
+            vec3 toFrag = vWorldPos - hlPos;
+            float dist = length(toFrag);
+            if (dist > 0.05 && dist < 3.6) {
+              vec3 dir = toFrag / dist;
+              float cosAng = dot(dir, beamDir);
+              float coneOuter = smoothstep(0.84, 0.985, cosAng);
+              float coneCore = smoothstep(0.955, 0.998, cosAng) * 0.85;
+              float atten = 1.0 / (1.0 + 0.45 * dist + 0.38 * dist * dist);
+              spotTotal += (coneOuter + coneCore) * atten;
+            }
+          }
+          litColor += baseCol * vec3(1.0, 0.95, 0.72) * (spotTotal * 3.8 * uPulse) + vec3(1.0, 0.93, 0.65) * (spotTotal * 0.26 * uPulse);
+
+          // Brilho avermelhado das lanternas traseiras triplas projetado no asfalto atrás do caminhão
+          for (int j = 0; j < 2; j++) {
+            float rSign = (j == 0) ? -1.0 : 1.0;
+            vec3 tlPos = vec3(uRearX - 0.05, 0.34, rSign * 0.30);
+            vec3 toRear = vWorldPos - tlPos;
+            float rDist = length(toRear);
+            if (rDist < 1.25 && toRear.x < 0.05) {
+              float rAtten = pow(max(0.0, 1.0 - rDist / 1.25), 2.0);
+              litColor += vec3(0.95, 0.16, 0.16) * rAtten * 0.38;
+            }
+          }
+        }
+
+        vec3 finalColor = mix(litColor, baseCol * (1.18 + 0.18 * uNight * uPulse), emissive);
+        gl_FragColor = vec4(finalColor, 1.0);
+      }
+    `;
+
+    function compileShader(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, vsSource));
+    gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, fsSource));
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+
+    const aPosLoc = gl.getAttribLocation(prog, 'aPos');
+    const aNormLoc = gl.getAttribLocation(prog, 'aNorm');
+    const aColorLoc = gl.getAttribLocation(prog, 'aColor');
+    const aMatLoc = gl.getAttribLocation(prog, 'aMat');
+    const uProjLoc = gl.getUniformLocation(prog, 'uProj');
+    const uViewLoc = gl.getUniformLocation(prog, 'uView');
+    const uCamPosLoc = gl.getUniformLocation(prog, 'uCamPos');
+    const uNightLoc = gl.getUniformLocation(prog, 'uNight');
+    const uPassLoc = gl.getUniformLocation(prog, 'uPass');
+    const uHlCfgLoc = gl.getUniformLocation(prog, 'uHlCfg');
+    const uRearXLoc = gl.getUniformLocation(prog, 'uRearX');
+    const uSteerYawLoc = gl.getUniformLocation(prog, 'uSteerYaw');
+    const uPulseLoc = gl.getUniformLocation(prog, 'uPulse');
+
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    const STRIDE = 11 * 4;
+    gl.enableVertexAttribArray(aPosLoc);
+    gl.vertexAttribPointer(aPosLoc, 3, gl.FLOAT, false, STRIDE, 0);
+    gl.enableVertexAttribArray(aNormLoc);
+    gl.vertexAttribPointer(aNormLoc, 3, gl.FLOAT, false, STRIDE, 3 * 4);
+    gl.enableVertexAttribArray(aColorLoc);
+    gl.vertexAttribPointer(aColorLoc, 3, gl.FLOAT, false, STRIDE, 6 * 4);
+    gl.enableVertexAttribArray(aMatLoc);
+    gl.vertexAttribPointer(aMatLoc, 2, gl.FLOAT, false, STRIDE, 9 * 4);
+
+    function hexToRgb(hex) {
+      const n = parseInt(hex.slice(1), 16);
+      return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+    }
+
+    let verts = [];
+    let transVerts = [];
+
+    function pushTriTo(arr, p0, p1, p2, n, rgb, m0 = 0.25, m1 = 0.0) {
+      arr.push(
+        p0[0], p0[1], p0[2], n[0], n[1], n[2], rgb[0], rgb[1], rgb[2], m0, m1,
+        p1[0], p1[1], p1[2], n[0], n[1], n[2], rgb[0], rgb[1], rgb[2], m0, m1,
+        p2[0], p2[1], p2[2], n[0], n[1], n[2], rgb[0], rgb[1], rgb[2], m0, m1
+      );
+    }
+
+    function pushTri(p0, p1, p2, n, rgb, metal = 0.25, emissive = 0.0) {
+      pushTriTo(verts, p0, p1, p2, n, rgb, metal, emissive);
+    }
+
+    function pushQuad(p0, p1, p2, p3, n, rgb, metal = 0.25, emissive = 0.0) {
+      pushTri(p0, p1, p2, n, rgb, metal, emissive);
+      pushTri(p0, p2, p3, n, rgb, metal, emissive);
+    }
+
+    function addBox(cx, cy, cz, w, h, d, hex, metal = 0.28, emissive = 0.0) {
+      const rgb = hexToRgb(hex);
+      const x0 = cx - w * 0.5, x1 = cx + w * 0.5;
+      const y0 = cy - h * 0.5, y1 = cy + h * 0.5;
+      const z0 = cz - d * 0.5, z1 = cz + d * 0.5;
+
+      pushQuad([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], rgb, metal, emissive);
+      pushQuad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], rgb, metal, emissive);
+      pushQuad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], rgb, metal, emissive);
+      pushQuad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], rgb, metal, emissive);
+      pushQuad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], rgb, metal, emissive);
+      pushQuad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], rgb, metal, emissive);
+    }
+
+    function addCylinder(cx, cy, cz, rTop, rBot, len, segs, axis, hex, metal = 0.4, emissive = 0.0) {
+      const rgb = hexToRgb(hex);
+      const half = len * 0.5;
+      const mapPt = (u, v, w) => {
+        if (axis === 'Y') return [cx + u, cy + w, cz + v];
+        if (axis === 'X') return [cx + w, cy + u, cz + v];
+        return [cx + u, cy + v, cz + w];
+      };
+      const mapNorm = (nu, nv, nw) => {
+        if (axis === 'Y') return [nu, nw, nv];
+        if (axis === 'X') return [nw, nu, nv];
+        return [nu, nv, nw];
+      };
+
+      for (let i = 0; i < segs; i++) {
+        const a0 = (i / segs) * Math.PI * 2;
+        const a1 = ((i + 1) / segs) * Math.PI * 2;
+        const c0 = Math.cos(a0), s0 = Math.sin(a0);
+        const c1 = Math.cos(a1), s1 = Math.sin(a1);
+        const nm = mapNorm((c0 + c1) * 0.5, (s0 + s1) * 0.5, 0);
+
+        const b0 = mapPt(c0 * rBot, s0 * rBot, -half);
+        const b1 = mapPt(c1 * rBot, s1 * rBot, -half);
+        const t1 = mapPt(c1 * rTop, s1 * rTop, half);
+        const t0 = mapPt(c0 * rTop, s0 * rTop, half);
+        pushQuad(b0, b1, t1, t0, nm, rgb, metal, emissive);
+
+        const topC = mapPt(0, 0, half);
+        const botC = mapPt(0, 0, -half);
+        pushTri(topC, t0, t1, mapNorm(0, 0, 1), rgb, metal, emissive);
+        pushTri(botC, b1, b0, mapNorm(0, 0, -1), rgb, metal, emissive);
+      }
+    }
+
+    // Anel Perimetral Oco (Sem disco interno = Zero Z-fighting com o piso de asfalto!)
+    function addHollowRing(cx, cy, cz, rInner, rOuter, height, segs, hex, metal = 0.5, emissive = 0.85) {
+      const rgb = hexToRgb(hex);
+      const y0 = cy - height * 0.5, y1 = cy + height * 0.5;
+      for (let i = 0; i < segs; i++) {
+        const a0 = (i / segs) * Math.PI * 2;
+        const a1 = ((i + 1) / segs) * Math.PI * 2;
+        const c0 = Math.cos(a0), s0 = Math.sin(a0);
+        const c1 = Math.cos(a1), s1 = Math.sin(a1);
+        const cm = (c0 + c1) * 0.5, sm = (s0 + s1) * 0.5;
+
+        // Top ring face
+        pushQuad(
+          [cx + c0 * rInner, y1, cz + s0 * rInner],
+          [cx + c0 * rOuter, y1, cz + s0 * rOuter],
+          [cx + c1 * rOuter, y1, cz + s1 * rOuter],
+          [cx + c1 * rInner, y1, cz + s1 * rInner],
+          [0, 1, 0], rgb, metal, emissive
+        );
+        // Outer wall
+        pushQuad(
+          [cx + c0 * rOuter, y0, cz + s0 * rOuter],
+          [cx + c1 * rOuter, y0, cz + s1 * rOuter],
+          [cx + c1 * rOuter, y1, cz + s1 * rOuter],
+          [cx + c0 * rOuter, y1, cz + s0 * rOuter],
+          [cm, 0, sm], rgb, metal, emissive
+        );
+        // Inner wall
+        pushQuad(
+          [cx + c1 * rInner, y0, cz + s1 * rInner],
+          [cx + c0 * rInner, y0, cz + s0 * rInner],
+          [cx + c0 * rInner, y1, cz + s0 * rInner],
+          [cx + c1 * rInner, y1, cz + s1 * rInner],
+          [-cm, 0, -sm], rgb, metal, emissive
+        );
+      }
+    }
+
+    // ============================================================================
+    // 🌙 CONES VOLUMÉTRICOS 3D DOS FARÓIS DIANTEIROS ( TRANSLÚCIDOS E ANIMADOS )
+    // ============================================================================
+    function addVolumetricHeadlightCone(fx, fy, fz, rStart, rEnd, length, pitchDown, yawSweep, hex, alphaStart) {
+      const rgb = hexToRgb(hex);
+      const segs = 22;
+      const cp = Math.cos(pitchDown), sp = Math.sin(pitchDown);
+      const cy = Math.cos(yawSweep), sy = Math.sin(yawSweep);
+
+      const xform = (lx, ly, lz) => {
+        const px = lx * cp - ly * sp;
+        const py = lx * sp + ly * cp;
+        const wx = px * cy - lz * sy;
+        const wz = px * sy + lz * cy;
+        return [fx + wx, fy + py, fz + wz];
+      };
+
+      // Subdivide length in 2 rings so near-lens is brighter and far-end fades smoothly
+      const steps = [
+        [0.0, rStart, alphaStart],
+        [length * 0.45, rStart + (rEnd - rStart) * 0.45, alphaStart * 0.65],
+        [length, rEnd, alphaStart * 0.18]
+      ];
+
+      for (let s = 0; s < steps.length - 1; s++) {
+        const [xA, radA, alpA] = steps[s];
+        const [xB, radB, alpB] = steps[s + 1];
+        const alpMid = (alpA + alpB) * 0.5;
+        for (let i = 0; i < segs; i++) {
+          const a0 = (i / segs) * Math.PI * 2;
+          const a1 = ((i + 1) / segs) * Math.PI * 2;
+          const c0 = Math.cos(a0), s0 = Math.sin(a0);
+          const c1 = Math.cos(a1), s1 = Math.sin(a1);
+
+          const p0 = xform(xA, c0 * radA, s0 * radA);
+          const p1 = xform(xA, c1 * radA, s1 * radA);
+          const p2 = xform(xB, c1 * radB, s1 * radB);
+          const p3 = xform(xB, c0 * radB, s0 * radB);
+          pushTriTo(transVerts, p0, p1, p2, [0, 1, 0], rgb, alpMid, 1.0);
+          pushTriTo(transVerts, p0, p2, p3, [0, 1, 0], rgb, alpMid, 1.0);
+        }
+      }
+    }
+
+    // ============================================================================
+    // 🛞 PNEU RADIAL 295/80 R22.5 ESCULPIDO EM TORNO (LATHE) + RODA 10 FUROS WEBGL
+    // ============================================================================
+    function addWheelAssemblyWebGL(wp, wheelScale, shiftX) {
+      const rTire = 0.24 * wheelScale;
+      const rRim = 0.134 * wheelScale;
+      const rHub = 0.050 * wheelScale;
+      const halfW = 0.076 * wheelScale;
+      const outSign = wp.z >= 0 ? 1 : -1;
+      const steerYaw = (wp.isSteer && steerDemo) ? Math.sin(clockTime * 2.4) * 0.28 : 0;
+      const cs = Math.cos(steerYaw), ss = Math.sin(steerYaw);
+      const cw = Math.cos(wheelAngle), sw = Math.sin(wheelAngle);
+
+      const wx = wp.x + shiftX, wy = rTire, wz = wp.z;
+
+      const xformPos = (lx, ly, lz) => {
+        const rx = lx * cw - ly * sw;
+        const ry = lx * sw + ly * cw;
+        const sx = rx * cs - lz * ss;
+        const sz = rx * ss + lz * cs;
+        return [wx + sx, wy + ry, wz + sz];
+      };
+      const xformNorm = (nx, ny, nz) => {
+        const rx = nx * cw - ny * sw;
+        const ry = nx * sw + ny * cw;
+        const sx = rx * cs - nz * ss;
+        const sz = rx * ss + nz * cs;
+        return [sx, ry, sz];
+      };
+
+      const rgbRubber = hexToRgb('#1c1f24');
+      const rgbGroove = hexToRgb('#0d0f12');
+      const rgbRim = hexToRgb('#d4d8e0');
+      const rgbChrome = hexToRgb('#f8fafc');
+      const rgbHub = hexToRgb(wp.isDual ? '#1e293b' : '#f8fafc');
+
+      const buildRadialTireCarcass = (zOff) => {
+        const ringProfile = [
+          [rRim, zOff - halfW * 0.84],
+          [rRim + (rTire - rRim) * 0.45, zOff - halfW * 1.03],
+          [rRim + (rTire - rRim) * 0.85, zOff - halfW * 0.94],
+          [rTire * 0.975, zOff - halfW * 0.78],
+          [rTire, zOff - halfW * 0.62],
+          [rTire, zOff - halfW * 0.24],
+          [rTire * 0.955, zOff - halfW * 0.19],
+          [rTire, zOff - halfW * 0.14],
+          [rTire, zOff + halfW * 0.14],
+          [rTire * 0.955, zOff + halfW * 0.19],
+          [rTire, zOff + halfW * 0.24],
+          [rTire, zOff + halfW * 0.62],
+          [rTire * 0.975, zOff + halfW * 0.78],
+          [rRim + (rTire - rRim) * 0.85, zOff + halfW * 0.94],
+          [rRim + (rTire - rRim) * 0.45, zOff + halfW * 1.03],
+          [rRim, zOff + halfW * 0.84]
+        ];
+
+        const segs = 36;
+        for (let i = 0; i < segs; i++) {
+          const a0 = (i / segs) * Math.PI * 2;
+          const a1 = ((i + 1) / segs) * Math.PI * 2;
+          const c0 = Math.cos(a0), s0 = Math.sin(a0);
+          const c1 = Math.cos(a1), s1 = Math.sin(a1);
+          const cm = Math.cos((a0 + a1) * 0.5), sm = Math.sin((a0 + a1) * 0.5);
+          const isSipe = (i % 2 === 0);
+
+          for (let p = 0; p < ringProfile.length - 1; p++) {
+            const [rA, zA] = ringProfile[p];
+            const [rB, zB] = ringProfile[p + 1];
+            const dr = rB - rA, dz = zB - zA;
+            const len = Math.hypot(dr, dz) || 1;
+            const nr = dz / len, nz = -dr / len;
+            const norm = xformNorm(cm * nr, sm * nr, nz);
+
+            const isGroove = (rA < rTire * 0.96 || rB < rTire * 0.96) && Math.abs(zA - zOff) < halfW * 0.5;
+            const isShoulder = (p >= 2 && p <= 4) || (p >= 10 && p <= 12);
+            const col = isGroove ? rgbGroove : (isShoulder && isSipe ? [0.08, 0.09, 0.11] : rgbRubber);
+
+            pushQuad(
+              xformPos(c0 * rA, s0 * rA, zA),
+              xformPos(c1 * rA, s1 * rA, zA),
+              xformPos(c1 * rB, s1 * rB, zB),
+              xformPos(c0 * rB, s0 * rB, zB),
+              norm, col, 0.08, 0.0
+            );
+          }
+        }
+      };
+
+      buildRadialTireCarcass(0);
+      if (wp.isDual) {
+        buildRadialTireCarcass(-outSign * (halfW * 2.16));
+      }
+
+      const zRimLip = outSign * (halfW * 0.84);
+      const zDish = wp.isDual ? (outSign * (halfW * 0.36)) : (outSign * (halfW * 0.76));
+      const zHubCap = outSign * (halfW * 0.98);
+      const rDish = rRim * 0.78;
+      const rimSegs = 28;
+
+      for (let i = 0; i < rimSegs; i++) {
+        const a0 = (i / rimSegs) * Math.PI * 2;
+        const a1 = ((i + 1) / rimSegs) * Math.PI * 2;
+        const c0 = Math.cos(a0), s0 = Math.sin(a0);
+        const c1 = Math.cos(a1), s1 = Math.sin(a1);
+        const cm = Math.cos((a0 + a1) * 0.5), sm = Math.sin((a0 + a1) * 0.5);
+
+        pushQuad(
+          xformPos(c0 * rDish, s0 * rDish, zDish),
+          xformPos(c1 * rDish, s1 * rDish, zDish),
+          xformPos(c1 * rRim, s1 * rRim, zRimLip),
+          xformPos(c0 * rRim, s0 * rRim, zRimLip),
+          xformNorm(-cm * 0.35, -sm * 0.35, outSign * 0.93), rgbRim, 0.82, 0.0
+        );
+
+        pushQuad(
+          xformPos(c0 * rHub, s0 * rHub, zDish),
+          xformPos(c1 * rHub, s1 * rHub, zDish),
+          xformPos(c1 * rDish, s1 * rDish, zDish),
+          xformPos(c0 * rDish, s0 * rDish, zDish),
+          xformNorm(0, 0, outSign), rgbRim, 0.85, 0.0
+        );
+
+        pushQuad(
+          xformPos(c0 * rHub, s0 * rHub, zDish),
+          xformPos(c1 * rHub, s1 * rHub, zDish),
+          xformPos(c1 * (rHub * 0.88), s1 * (rHub * 0.88), zHubCap),
+          xformPos(c0 * (rHub * 0.88), s0 * (rHub * 0.88), zHubCap),
+          xformNorm(cm, sm, outSign * 0.2), rgbHub, 0.75, 0.0
+        );
+        pushTri(
+          xformPos(0, 0, zHubCap),
+          xformPos(c0 * (rHub * 0.88), s0 * (rHub * 0.88), zHubCap),
+          xformPos(c1 * (rHub * 0.88), s1 * (rHub * 0.88), zHubCap),
+          xformNorm(0, 0, outSign), rgbHub, 0.85, 0.0
+        );
+      }
+
+      const numHoles = 10;
+      const zHole = zDish + outSign * 0.005;
+      const rHolePos = (rDish + rHub) * 0.56;
+      const holeRad = rTire * 0.050;
+      const rNutPos = rHub * 1.30;
+      const nutRad = rTire * 0.024;
+      const faceNorm = xformNorm(0, 0, outSign);
+
+      for (let h = 0; h < numHoles; h++) {
+        const ha = (h / numHoles) * Math.PI * 2;
+        const hc = Math.cos(ha), hs = Math.sin(ha);
+        const px = -hs * holeRad, py = hc * holeRad;
+        const rx = hc * holeRad, ry = hs * holeRad;
+        const hx = hc * rHolePos, hy = hs * rHolePos;
+
+        pushQuad(
+          xformPos(hx - rx, hy - ry, zHole),
+          xformPos(hx + px, hy + py, zHole),
+          xformPos(hx + rx, hy + ry, zHole),
+          xformPos(hx - px, hy - py, zHole),
+          faceNorm, rgbGroove, 0.05, 0.0
+        );
+
+        const nx = hc * rNutPos, ny = hs * rNutPos;
+        const zNut = zHole + outSign * 0.004;
+        pushQuad(
+          xformPos(nx - nutRad, ny - nutRad, zNut),
+          xformPos(nx + nutRad, ny - nutRad, zNut),
+          xformPos(nx + nutRad, ny + nutRad, zNut),
+          xformPos(nx - nutRad, ny + nutRad, zNut),
+          faceNorm, rgbChrome, 0.95, 0.0
+        );
+      }
+
+      const zRib = zHubCap + outSign * 0.004;
+      const ribW = rHub * 0.16, ribL = rHub * 0.82;
+      for (let r = 0; r < 3; r++) {
+        const ra = (r / 3) * Math.PI;
+        const rc = Math.cos(ra), rs = Math.sin(ra);
+        const wx0 = -rs * ribW, wy0 = rc * ribW;
+        pushQuad(
+          xformPos(-rc * ribL + wx0, -rs * ribL + wy0, zRib),
+          xformPos(rc * ribL + wx0, rs * ribL + wy0, zRib),
+          xformPos(rc * ribL - wx0, rs * ribL - wy0, zRib),
+          xformPos(-rc * ribL - wx0, -rs * ribL - wy0, zRib),
+          faceNorm, rgbChrome, 0.95, 0.0
+        );
+      }
+    }
+
+    // ============================================================================
+    // 🚛 CONSTRUÇÃO 3D SÓLIDA DOS 5 CAMINHÕES (100% IDÊNTICA AO INDEX.HTML)
+    // ============================================================================
+    function buildCargoWebGL(cx, fy, sx, sy, sz, cargo) {
+      if (cargo === 'Vazio') return;
+      const b = (x, y, z, w, h, d, hex, m = 0.2) => addBox(cx + x * sx, fy + y * sy, z * sz, w * sx, h * sy, d * sz, hex, m, 0);
+      if (cargo === 'Grãos') {
+        for (let l = 0; l < 3; l++) {
+          for (let r = -1; r <= 1; r++) {
+            for (let c = -1; c <= 1; c += 2) {
+              b(r * 0.34, 0.10 + l * 0.13, c * 0.14, 0.28, 0.13, 0.22, '#f59e0b', 0.15);
+            }
+          }
+        }
+      } else if (cargo === 'Madeira Bruta') {
+        const pos = [[0.14, -0.22], [0.14, 0], [0.14, 0.22], [0.29, -0.11], [0.29, 0.11], [0.44, 0]];
+        pos.forEach(([py, pz]) => {
+          addCylinder(cx, fy + py * sy, pz * sz, 0.085 * sy, 0.085 * sy, 1.22 * sx, 12, 'X', '#78350f', 0.12, 0);
+          addCylinder(cx, fy + py * sy, pz * sz, 0.070 * sy, 0.070 * sy, 1.23 * sx, 12, 'X', '#fde68a', 0.15, 0);
+        });
+        b(-0.34, 0.24, 0, 0.04, 0.40, 0.58, '#ef4444', 0.3);
+        b(0.34, 0.24, 0, 0.04, 0.40, 0.58, '#ef4444', 0.3);
+      } else if (cargo === 'Combustível') {
+        addCylinder(cx, fy + 0.30 * sy, 0, 0.30 * sy, 0.30 * sy, 1.22 * sx, 24, 'X', '#e2e8f0', 0.85, 0);
+        b(0, 0.30, 0, 1.23, 0.10, 0.61, '#ef4444', 0.4);
+        addCylinder(cx - 0.28 * sx, fy + 0.60 * sy, 0, 0.08 * sy, 0.08 * sy, 0.08 * sy, 12, 'Y', '#334155', 0.5, 0);
+        addCylinder(cx + 0.28 * sx, fy + 0.60 * sy, 0, 0.08 * sy, 0.08 * sy, 0.08 * sy, 12, 'Y', '#334155', 0.5, 0);
+      } else if (cargo === 'Materiais de Construção') {
+        b(-0.30, 0.06, 0, 0.48, 0.06, 0.56, '#d97706', 0.2);
+        b(-0.30, 0.23, 0, 0.44, 0.28, 0.50, '#b91c1c', 0.15);
+        b(0.28, 0.20, -0.15, 0.54, 0.28, 0.18, '#94a3b8', 0.2);
+        b(0.28, 0.20, 0.15, 0.54, 0.28, 0.18, '#94a3b8', 0.2);
+      } else if (cargo === 'Alimentos Processados') {
+        b(-0.30, 0.20, -0.14, 0.36, 0.28, 0.26, '#0284c7', 0.3);
+        b(-0.30, 0.20, 0.14, 0.36, 0.28, 0.26, '#e11d48', 0.3);
+        b(0.18, 0.20, -0.14, 0.36, 0.28, 0.26, '#e11d48', 0.3);
+        b(0.18, 0.20, 0.14, 0.36, 0.28, 0.26, '#0284c7', 0.3);
+        b(-0.06, 0.40, 0, 0.44, 0.20, 0.34, '#facc15', 0.3);
+      }
+    }
+
+    // Carroceria Graneleira / Carga Seca Sólida com Lanternas Traseiras Triplas Embutidas (Zero sobreposição!)
+    function addSolidCargoBedWebGL(cx, fy, lenX, widZ, stakeH, hasRearLights = true) {
+      addBox(cx, fy - 0.08, 0, lenX - 0.04, 0.16, widZ * 0.62, '#11151d', 0.3, 0);
+      addBox(cx, fy, 0, lenX, 0.09, widZ, '#78350f', 0.2, 0);
+      addBox(cx + lenX * 0.5 - 0.04, fy + (stakeH + 0.18) * 0.5, 0, 0.08, stakeH + 0.18, widZ, '#334155', 0.4, 0);
+
+      const rearX = cx - lenX * 0.5;
+      addBox(rearX + 0.04, fy + (stakeH * 0.92) * 0.5, 0, 0.08, stakeH * 0.92, widZ, '#334155', 0.4, 0);
+
+      if (hasRearLights) {
+        // Para-choque traseiro homologado com faixas refletivas CONTRAN vermelho/branco
+        addBox(rearX + 0.02, fy - 0.19, 0, 0.06, 0.09, widZ * 0.94, '#f8fafc', 0.9, 0);
+        for (let rz of [-widZ * 0.30, 0, widZ * 0.30]) {
+          addBox(rearX + 0.015, fy - 0.19, rz - 0.04, 0.065, 0.038, 0.12, '#ef4444', 0.4, 0.85);
+          addBox(rearX + 0.015, fy - 0.19, rz + 0.06, 0.065, 0.038, 0.08, '#f8fafc', 0.8, 0.75);
+        }
+
+        // Bloco de Lanternas Traseiras Triplas (Freio Vermelho + Seta Âmbar + Ré Branca)
+        for (let s of [-1, 1]) {
+          addBox(rearX + 0.04, fy - 0.13, s * (widZ * 0.36), 0.05, 0.12, 0.05, '#11151d', 0.3, 0);
+          addBox(rearX + 0.015, fy - 0.095, s * (widZ * 0.33), 0.05, 0.095, 0.24, '#0d0f12', 0.3, 0);
+          // 1ª Câmara (Externa): Freio/Lanterna Vermelha
+          addBox(rearX + 0.008, fy - 0.095, s * (widZ * 0.33 + 0.062), 0.056, 0.068, 0.082, '#ef4444', 0.5, 1.0);
+          // 2ª Câmara (Central): Seta Direcional Âmbar
+          addBox(rearX + 0.008, fy - 0.095, s * (widZ * 0.33 - 0.014), 0.056, 0.068, 0.058, '#f59e0b', 0.5, 0.95);
+          // 3ª Câmara (Interna): Luz de Ré Branca
+          addBox(rearX + 0.008, fy - 0.095, s * (widZ * 0.33 - 0.072), 0.056, 0.068, 0.046, '#f8fafc', 0.6, 0.90);
+          // Luz delimitadora superior na tampa traseira
+          addBox(rearX + 0.008, fy + stakeH * 0.82, s * (widZ * 0.44), 0.04, 0.032, 0.05, '#ef4444', 0.5, 1.0);
+        }
+      }
+
+      for (let s of [-1, 1]) {
+        const pz = s * (widZ * 0.5 - 0.03);
+        addBox(cx, fy + stakeH * 0.5, pz, lenX - 0.04, stakeH, 0.055, '#92400e', 0.25, 0);
+        addBox(cx, fy + stakeH, pz, lenX, 0.045, 0.068, '#334155', 0.45, 0);
+        addBox(cx, fy + stakeH * 0.48, pz, lenX, 0.032, 0.065, '#334155', 0.45, 0);
+        addBox(cx + lenX * 0.18, fy - 0.08, s * (widZ * 0.5 - 0.04), lenX * 0.42, 0.12, 0.04, '#334155', 0.4, 0);
+
+        const num = Math.max(4, Math.floor(lenX / 0.28));
+        const step = (lenX - 0.12) / (num - 1);
+        for (let i = 0; i < num; i++) {
+          const sx = (cx - lenX * 0.5 + 0.06) + i * step;
+          addBox(sx, fy + stakeH * 0.5, pz, 0.045, stakeH + 0.04, 0.072, '#334155', 0.45, 0);
+        }
+      }
+    }
+
+    function addFramedCabinWindowsWebGL(cabX, cabY, cabW, cabH, cabD, cabHex) {
+      const wsH = cabH * 0.38;
+      const wsY = cabY + cabH * 0.18;
+      addBox(cabX + cabW * 0.5 - 0.02, wsY, 0, 0.08, wsH, cabD * 0.84, '#1e3a5f', 0.92, 0);
+      for (let s of [-1, 1]) {
+        addBox(cabX + cabW * 0.5 - 0.02, wsY, s * (cabD * 0.5 - 0.03), 0.09, wsH + 0.04, 0.07, cabHex, 0.45, 0);
+        addBox(cabX + cabW * 0.06, wsY, s * (cabD * 0.5 - 0.015), cabW * 0.62, wsH * 0.92, 0.06, '#1e3a5f', 0.92, 0);
+        addBox(cabX - cabW * 0.12, cabY - cabH * 0.08, s * (cabD * 0.5 + 0.01), 0.10, 0.03, 0.03, '#f8fafc', 0.95, 0);
+      }
+    }
+
+    function buildSceneGeometry(specId) {
+      verts = [];
+      transVerts = [];
+
+      // 1. Pista Asfáltica Texturizada do Showroom (Sem Z-fighting! Anel ciano oco apenas na borda externa)
+      addCylinder(0, -0.09, 0, 3.22, 3.38, 0.18, 56, 'Y', nightMode ? '#141923' : '#1e2636', 0.12, -1.0);
+      addHollowRing(0, 0.002, 0, 3.20, 3.28, 0.024, 56, '#38bdf8', 0.5, 0.85);
+
+      // Faixas brancas contínuas de acostamento da rodovia
+      for (let side of [-1, 1]) {
+        addBox(0, 0.006, side * 0.86, 4.90, 0.010, 0.05, '#e2e8f0', 0.2, 0.15);
+      }
+      // Faixas tracejadas amarelas animadas no eixo central
+      for (let rx = -2.3 - roadScroll; rx <= 2.1; rx += 0.65) {
+        if (rx >= -2.5 && rx <= 2.3) {
+          addBox(rx, 0.008, 0, 0.36, 0.014, 0.09, '#facc15', 0.2, 0.45);
+        }
+      }
+
+      const shiftX = specId === 5 ? 0.32 : (specId === 4 ? 0.14 : 0.0);
+      let wheels = [];
+      let wheelScale = 1.0;
+
+      if (specId === 1) {
+        // 🚐 1. FORD F-4000 CARGA SECA
+        const cabHex = paintVariant === 0 ? '#1d4ed8' : '#f8fafc';
+        addBox(0.06 + shiftX, 0.34, 0, 2.12, 0.24, 0.68, '#11151d', 0.3);
+        addBox(0.44 + shiftX, 0.68, 0, 0.66, 0.68, 0.78, cabHex, 0.48);
+        addFramedCabinWindowsWebGL(0.44 + shiftX, 0.68, 0.66, 0.68, 0.78, cabHex);
+
+        addBox(0.96 + shiftX, 0.56, 0, 0.50, 0.40, 0.76, cabHex, 0.48);
+        addBox(0.95 + shiftX, 0.77, 0, 0.46, 0.06, 0.44, cabHex, 0.48);
+        addBox(1.20 + shiftX, 0.56, 0, 0.06, 0.28, 0.68, '#11151d', 0.4);
+        addBox(1.21 + shiftX, 0.56, 0, 0.08, 0.26, 0.62, '#f8fafc', 0.95);
+        addBox(1.22 + shiftX, 0.35, 0, 0.14, 0.15, 0.82, '#f8fafc', 0.95);
+
+        for (let s of [-1, 1]) {
+          addBox(1.22 + shiftX, 0.58, s * 0.26, 0.09, 0.12, 0.14, '#fef08a', 0.5, 1.0);
+          addBox(1.22 + shiftX, 0.48, s * 0.26, 0.09, 0.05, 0.14, '#facc15', 0.5, 0.9);
+          addBox(0.44 + shiftX, 0.32, s * 0.39, 0.58, 0.12, 0.10, '#f8fafc', 0.9);
+          addBox(0.66 + shiftX, 0.80, s * 0.43, 0.07, 0.18, 0.05, '#f8fafc', 0.9);
+        }
+        const pulse = Math.sin(clockTime * 9) > 0 ? '#fde047' : '#d97706';
+        addCylinder(0.44 + shiftX, 1.04, 0, 0.11, 0.13, 0.05, 14, 'Y', '#11151d', 0.3);
+        addCylinder(0.44 + shiftX, 1.11, 0, 0.08, 0.09, 0.11, 14, 'Y', pulse, 0.5, 1.0);
+
+        addSolidCargoBedWebGL(-0.38 + shiftX, 0.45, 1.12, 0.80, 0.25, true);
+        buildCargoWebGL(-0.38 + shiftX, 0.47, 0.72, 0.78, 0.85, currentCargo);
+        wheelScale = 0.88;
+        wheels = [
+          { x: 0.84, z: 0.39, isSteer: true, isDual: false }, { x: 0.84, z: -0.39, isSteer: true, isDual: false },
+          { x: -0.55, z: 0.39, isSteer: false, isDual: true }, { x: -0.55, z: -0.39, isSteer: false, isDual: true }
+        ];
+      } else if (specId === 2) {
+        // 🚚 2. SCANIA 113H 360 TOPLINE BICUDO (Série 3)
+        const cabHex = paintVariant === 0 ? '#38bdf8' : '#f8fafc';
+        addBox(-0.02 + shiftX, 0.36, 0, 2.62, 0.26, 0.74, '#11151d', 0.3);
+        addBox(0.50 + shiftX, 0.78, 0, 0.70, 0.84, 0.82, cabHex, 0.45);
+        addBox(0.47 + shiftX, 1.29, 0, 0.64, 0.22, 0.78, cabHex, 0.45);
+        addFramedCabinWindowsWebGL(0.50 + shiftX, 0.78, 0.70, 0.84, 0.82, cabHex);
+
+        addBox(1.09 + shiftX, 0.65, 0, 0.60, 0.56, 0.72, cabHex, 0.45);
+        addBox(1.06 + shiftX, 0.42, 0, 0.56, 0.32, 0.66, '#11151d', 0.3);
+        addBox(1.37 + shiftX, 0.65, 0, 0.06, 0.46, 0.56, '#11151d', 0.3);
+        for (let gy of [0.48, 0.56, 0.64, 0.72, 0.80]) {
+          addBox(1.385 + shiftX, gy, 0, 0.08, 0.032, 0.52, cabHex, 0.45);
+        }
+        addBox(1.38 + shiftX, 0.35, 0, 0.16, 0.20, 0.86, cabHex, 0.45);
+        addBox(0.84 + shiftX, 1.18, 0, 0.16, 0.08, 0.84, cabHex, 0.45);
+        addCylinder(0.12 + shiftX, 1.06, -0.41, 0.05, 0.05, 1.26, 14, 'Y', '#f8fafc', 0.95);
+        addCylinder(0.82 + shiftX, 0.72, -0.44, 0.09, 0.09, 0.34, 14, 'Y', '#11151d', 0.4);
+
+        for (let lz of [-0.22, 0, 0.22]) {
+          addBox(0.76 + shiftX, 1.40, lz, 0.07, 0.06, 0.06, '#facc15', 0.5, 1.0);
+        }
+
+        for (let s of [-1, 1]) {
+          addBox(1.06 + shiftX, 0.54, s * 0.39, 0.58, 0.10, 0.14, cabHex, 0.45);
+          addBox(0.62 + shiftX, 0.36, s * 0.39, 0.36, 0.20, 0.12, cabHex, 0.45);
+          addCylinder(0.18 + shiftX, 0.35, s * 0.39, 0.14, 0.14, 0.56, 16, 'X', '#f8fafc', 0.92);
+          addBox(0.76 + shiftX, 0.69, s * 0.42, 1.20, 0.045, 0.02, '#ec4899', 0.3, 0.4);
+          addBox(0.76 + shiftX, 0.635, s * 0.42, 1.20, 0.045, 0.02, '#7c3aed', 0.3, 0.4);
+          addBox(0.76 + shiftX, 0.58, s * 0.42, 1.20, 0.045, 0.02, '#1e3a8a', 0.3, 0.4);
+          addBox(1.40 + shiftX, 0.38, s * 0.28, 0.08, 0.11, 0.16, '#fef08a', 0.5, 1.0);
+          addBox(1.40 + shiftX, 0.29, s * 0.16, 0.08, 0.07, 0.10, '#facc15', 0.5, 0.95);
+          addBox(0.74 + shiftX, 0.94, s * 0.46, 0.08, 0.24, 0.05, '#11151d', 0.4);
+        }
+
+        addSolidCargoBedWebGL(-0.52 + shiftX, 0.47, 1.54, 0.86, 0.29, true);
+        buildCargoWebGL(-0.52 + shiftX, 0.49, 0.96, 0.95, 0.96, currentCargo);
+        wheelScale = 1.0;
+        wheels = [
+          { x: 1.06, z: 0.43, isSteer: true, isDual: false }, { x: 1.06, z: -0.43, isSteer: true, isDual: false },
+          { x: -0.82, z: 0.43, isSteer: false, isDual: true }, { x: -0.82, z: -0.43, isSteer: false, isDual: true }
+        ];
+      } else if (specId === 3) {
+        // 🚛 3. MERCEDES-BENZ L-1620 BICUDO CLÁSSICO
+        const cabHex = paintVariant === 0 ? '#15803d' : '#1d4ed8';
+        addBox(-0.04 + shiftX, 0.36, 0, 2.70, 0.26, 0.74, '#11151d', 0.3);
+        addBox(0.54 + shiftX, 0.78, 0, 0.68, 0.84, 0.82, cabHex, 0.45);
+        addFramedCabinWindowsWebGL(0.54 + shiftX, 0.78, 0.68, 0.84, 0.82, cabHex);
+
+        addBox(1.06 + shiftX, 0.60, 0, 0.56, 0.48, 0.72, cabHex, 0.45);
+        addBox(1.02 + shiftX, 0.84, 0, 0.46, 0.10, 0.66, cabHex, 0.45);
+        addBox(1.04 + shiftX, 0.42, 0, 0.54, 0.30, 0.68, '#11151d', 0.3);
+        addBox(1.33 + shiftX, 0.62, 0, 0.08, 0.36, 0.56, '#11151d', 0.35);
+        addBox(1.34 + shiftX, 0.62, 0, 0.09, 0.04, 0.54, '#f8fafc', 0.95);
+        addCylinder(1.35 + shiftX, 0.62, 0, 0.06, 0.06, 0.04, 14, 'X', '#f8fafc', 0.95);
+        addBox(1.35 + shiftX, 0.36, 0, 0.14, 0.18, 0.86, '#f8fafc', 0.95);
+        addBox(0.86 + shiftX, 1.16, 0, 0.18, 0.07, 0.84, '#f8fafc', 0.95);
+        addCylinder(0.18 + shiftX, 1.05, 0.40, 0.045, 0.045, 1.18, 14, 'Y', '#f8fafc', 0.95);
+
+        for (let s of [-1, 1]) {
+          addBox(1.02 + shiftX, 0.53, s * 0.39, 0.54, 0.11, 0.15, cabHex, 0.45);
+          addBox(0.76 + shiftX, 0.64, s * 0.42, 1.14, 0.06, 0.02, '#f8fafc', 0.5);
+          addCylinder(0.16 + shiftX, 0.35, s * 0.39, 0.14, 0.14, 0.62, 16, 'X', '#11151d', 0.45);
+          addCylinder(0.56 + shiftX, 1.24, s * 0.22, 0.035, 0.06, 0.38, 12, 'X', '#f8fafc', 0.95);
+          addBox(1.36 + shiftX, 0.38, s * 0.28, 0.08, 0.12, 0.16, '#fef08a', 0.5, 1.0);
+          addBox(1.36 + shiftX, 0.38, s * 0.39, 0.08, 0.06, 0.10, '#f59e0b', 0.5, 0.9);
+        }
+
+        addSolidCargoBedWebGL(-0.56 + shiftX, 0.47, 1.60, 0.88, 0.30, true);
+        buildCargoWebGL(-0.56 + shiftX, 0.49, 1.08, 1.0, 1.0, currentCargo);
+        wheelScale = 1.02;
+        wheels = [
+          { x: 1.02, z: 0.44, isSteer: true, isDual: false }, { x: 1.02, z: -0.44, isSteer: true, isDual: false },
+          { x: -0.88, z: 0.44, isSteer: false, isDual: true }, { x: -0.88, z: -0.44, isSteer: false, isDual: true }
+        ];
+      } else if (specId === 4) {
+        // 🚜 4. VOLVO FH 540 GLOBETROTTER 6x2
+        const cabHex = paintVariant === 0 ? '#ea580c' : '#dc2626';
+        addBox(-0.12 + shiftX, 0.37, 0, 3.08, 0.28, 0.76, '#11151d', 0.3);
+        addBox(0.78 + shiftX, 0.80, 0, 0.98, 0.90, 0.88, cabHex, 0.48);
+        addBox(0.74 + shiftX, 1.40, 0, 0.90, 0.36, 0.84, cabHex, 0.48);
+        addBox(1.19 + shiftX, 1.42, 0, 0.06, 0.14, 0.62, '#f8fafc', 0.4, 0.9);
+        addFramedCabinWindowsWebGL(0.78 + shiftX, 0.84, 0.98, 0.84, 0.88, cabHex);
+
+        addBox(1.21 + shiftX, 1.56, 0, 0.08, 0.05, 0.76, '#f8fafc', 0.95);
+        for (let lz of [-0.27, -0.09, 0.09, 0.27]) {
+          addBox(1.24 + shiftX, 1.56, lz, 0.08, 0.08, 0.08, '#fef08a', 0.5, 1.0);
+        }
+        addBox(1.26 + shiftX, 0.58, 0, 0.08, 0.52, 0.70, '#11151d', 0.35);
+        addBox(1.27 + shiftX, 0.58, 0, 0.09, 0.44, 0.60, '#f8fafc', 0.92);
+        addBox(1.26 + shiftX, 0.34, 0, 0.14, 0.22, 0.88, cabHex, 0.48);
+
+        for (let s of [-1, 1]) {
+          addCylinder(0.24 + shiftX, 1.15, s * 0.41, 0.05, 0.05, 1.38, 14, 'Y', '#f8fafc', 0.95);
+          addBox(1.28 + shiftX, 0.42, s * 0.34, 0.09, 0.20, 0.16, '#fef08a', 0.5, 1.0);
+          addBox(0.05 + shiftX, 0.38, s * 0.42, 1.18, 0.28, 0.08, cabHex, 0.48);
+          addBox(0.05 + shiftX, 0.38, s * 0.43, 1.16, 0.04, 0.09, '#f8fafc', 0.95);
+          addBox(1.12 + shiftX, 0.98, s * 0.48, 0.08, 0.28, 0.06, '#11151d', 0.4);
+        }
+
+        addSolidCargoBedWebGL(-0.68 + shiftX, 0.49, 1.90, 0.92, 0.34, true);
+        buildCargoWebGL(-0.68 + shiftX, 0.51, 1.30, 1.12, 1.06, currentCargo);
+        wheelScale = 1.05;
+        wheels = [
+          { x: 0.92, z: 0.46, isSteer: true, isDual: false }, { x: 0.92, z: -0.46, isSteer: true, isDual: false },
+          { x: -0.82, z: 0.46, isSteer: false, isDual: true }, { x: -0.82, z: -0.46, isSteer: false, isDual: true },
+          { x: -1.30, z: 0.46, isSteer: false, isDual: true }, { x: -1.30, z: -0.46, isSteer: false, isDual: true }
+        ];
+      } else {
+        // 🏁 5. PETERBILT 389 / KENWORTH W900 BI-TREM 5 EIXOS
+        const cabHex = paintVariant === 0 ? '#18181b' : '#1e1b4b';
+        addBox(-0.48 + shiftX, 0.37, 0, 4.08, 0.28, 0.76, '#11151d', 0.3);
+        addBox(0.88 + shiftX, 0.84, 0, 0.92, 0.92, 0.90, cabHex, 0.52);
+        addBox(0.78 + shiftX, 1.43, 0, 0.78, 0.34, 0.86, cabHex, 0.52);
+        addBox(1.14 + shiftX, 0.68, 0, 1.48, 0.07, 0.91, '#facc15', 0.7);
+        addFramedCabinWindowsWebGL(0.92 + shiftX, 0.86, 0.84, 0.86, 0.90, cabHex);
+
+        addBox(1.48 + shiftX, 0.68, 0, 0.56, 0.62, 0.76, cabHex, 0.52);
+        addBox(1.44 + shiftX, 0.44, 0, 0.54, 0.34, 0.72, '#11151d', 0.3);
+        addBox(1.75 + shiftX, 0.68, 0, 0.10, 0.58, 0.56, '#f8fafc', 0.95);
+        addBox(1.79 + shiftX, 0.46, 0, 0.16, 0.38, 0.90, '#f8fafc', 0.95);
+        addBox(1.30 + shiftX, 1.24, 0, 0.20, 0.08, 0.90, '#f8fafc', 0.95);
+        for (let lz of [-0.30, -0.15, 0, 0.15, 0.30]) {
+          addBox(1.16 + shiftX, 1.61, lz, 0.08, 0.07, 0.07, '#facc15', 0.5, 1.0);
+        }
+        for (let s of [-1, 1]) {
+          addBox(1.42 + shiftX, 0.54, s * 0.40, 0.54, 0.12, 0.16, cabHex, 0.52);
+          addCylinder(0.46 + shiftX, 1.24, s * 0.45, 0.065, 0.065, 1.60, 14, 'Y', '#f8fafc', 0.95);
+          addCylinder(0.86 + shiftX, 0.36, s * 0.43, 0.16, 0.16, 0.82, 16, 'X', '#f8fafc', 0.95);
+          addBox(1.72 + shiftX, 0.56, s * 0.34, 0.12, 0.16, 0.16, '#f8fafc', 0.95);
+          addBox(1.76 + shiftX, 0.56, s * 0.34, 0.08, 0.12, 0.12, '#fef08a', 0.5, 1.0);
+        }
+        addCylinder(-0.93 + shiftX, 0.44, 0, 0.28, 0.28, 0.16, 18, 'Y', '#f8fafc', 0.9);
+        addSolidCargoBedWebGL(-0.18 + shiftX, 0.50, 1.38, 0.92, 0.36, false);
+        addSolidCargoBedWebGL(-1.68 + shiftX, 0.50, 1.38, 0.92, 0.36, true);
+        buildCargoWebGL(-0.18 + shiftX, 0.52, 0.92, 1.12, 1.05, currentCargo);
+        buildCargoWebGL(-1.68 + shiftX, 0.52, 0.92, 1.12, 1.05, currentCargo);
+        wheelScale = 1.05;
+        wheels = [
+          { x: 1.42, z: 0.46, isSteer: true, isDual: false }, { x: 1.42, z: -0.46, isSteer: true, isDual: false },
+          { x: 0.42, z: 0.46, isSteer: false, isDual: true }, { x: 0.42, z: -0.46, isSteer: false, isDual: true },
+          { x: -0.58, z: 0.46, isSteer: false, isDual: true }, { x: -0.58, z: -0.46, isSteer: false, isDual: true },
+          { x: -1.72, z: 0.46, isSteer: false, isDual: true }, { x: -1.72, z: -0.46, isSteer: false, isDual: true },
+          { x: -2.18, z: 0.46, isSteer: false, isDual: true }, { x: -2.18, z: -0.46, isSteer: false, isDual: true }
+        ];
+      }
+
+      // Eixos Rígidos, Diferenciais e Caixas de Roda Sólidas
+      for (let i = 0; i < wheels.length; i += 2) {
+        const wp = wheels[i];
+        addCylinder(wp.x + shiftX, 0.24 * wheelScale, 0, 0.055 * wheelScale, 0.055 * wheelScale, Math.abs(wp.z) * 1.95, 12, 'Z', '#11151d', 0.4);
+        addBox(wp.x + shiftX, 0.34 * wheelScale, 0, 0.44 * wheelScale, 0.22 * wheelScale, Math.abs(wp.z) * 1.65, '#11151d', 0.3);
+      }
+
+      // Pneus Radiais 295/80 R22.5 + Rodas 10 Furos
+      wheels.forEach(wp => {
+        addWheelAssemblyWebGL(wp, wheelScale, shiftX);
+      });
+
+      // Cones Volumétricos 3D Translúcidos dos Faróis Dianteiros (ativos à noite)
+      if (nightMode) {
+        const cfg = SPECS[specId];
+        const steerSweep = steerDemo ? Math.sin(clockTime * 2.4) * 0.16 : 0.0;
+        for (let s of [-1, 1]) {
+          // Cone Principal Halógeno/LED + Núcleo de Facho Alto
+          addVolumetricHeadlightCone(cfg.hlX + shiftX, cfg.hlY, s * cfg.hlZ, 0.055, 0.42, 2.30, -0.095, steerSweep, '#fef08a', 0.18);
+          addVolumetricHeadlightCone(cfg.hlX + shiftX, cfg.hlY, s * cfg.hlZ, 0.030, 0.18, 1.60, -0.095, steerSweep, '#ffffff', 0.28);
+          if (cfg.fogY) {
+            addVolumetricHeadlightCone(cfg.hlX + shiftX, cfg.fogY, s * cfg.fogZ, 0.035, 0.22, 1.20, -0.13, steerSweep * 0.5, '#facc15', 0.18);
+          }
+        }
+        if (cfg.roofY) {
+          for (let rz of [-0.27, -0.09, 0.09, 0.27]) {
+            addVolumetricHeadlightCone(cfg.hlX - 0.04 + shiftX, cfg.roofY, rz, 0.028, 0.20, 1.65, -0.18, 0.0, '#fef08a', 0.14);
+          }
+        }
+      }
+    }
+
+    function perspectiveMatrix(fovRad, aspect, near, far) {
+      const f = 1.0 / Math.tan(fovRad * 0.5);
+      const nf = 1.0 / (near - far);
+      return new Float32Array([
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (far + near) * nf, -1,
+        0, 0, (2 * far * near) * nf, 0
+      ]);
+    }
+
+    function lookAtMatrix(eye, target, up) {
+      let zx = eye[0] - target[0], zy = eye[1] - target[1], zz = eye[2] - target[2];
+      let zlen = Math.hypot(zx, zy, zz) || 1;
+      zx /= zlen; zy /= zlen; zz /= zlen;
+
+      let xx = up[1] * zz - up[2] * zy;
+      let xy = up[2] * zx - up[0] * zz;
+      let xz = up[0] * zy - up[1] * zx;
+      let xlen = Math.hypot(xx, xy, xz) || 1;
+      xx /= xlen; xy /= xlen; xz /= xlen;
+
+      let yx = zy * xz - zz * xy;
+      let yy = zz * xx - zx * xz;
+      let yz = zx * xy - zy * xx;
+
+      return new Float32Array([
+        xx, yx, zx, 0,
+        xy, yy, zy, 0,
+        xz, yz, zz, 0,
+        -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
+        -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
+        -(zx * eye[0] + zy * eye[1] + zz * eye[2]),
+        1
+      ]);
+    }
+
+    function renderFrame() {
+      clockTime += 0.016;
+      wheelAngle -= 0.058;
+      roadScroll = (roadScroll + 0.018) % 0.65;
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dispW = Math.floor(canvas.clientWidth * dpr) || 840;
+      const dispH = Math.floor(canvas.clientHeight * dpr) || 290;
+      if (canvas.width !== dispW || canvas.height !== dispH) {
+        canvas.width = dispW;
+        canvas.height = dispH;
+      }
+
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+
+      if (nightMode) {
+        gl.clearColor(0.03, 0.045, 0.085, 1.0);
+      } else {
+        gl.clearColor(0.06, 0.09, 0.16, 1.0);
+      }
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      const cfg = SPECS[currentSpecId];
+      const shiftX = currentSpecId === 5 ? 0.32 : (currentSpecId === 4 ? 0.14 : 0.0);
+      const dist = cfg.camDist * zoomFactor;
+      const eye = [
+        Math.cos(pitch) * Math.cos(yaw) * dist,
+        0.55 + Math.sin(pitch) * dist,
+        Math.cos(pitch) * Math.sin(yaw) * dist
+      ];
+      const proj = perspectiveMatrix(35 * Math.PI / 180, canvas.width / canvas.height, 0.1, 50.0);
+      const view = lookAtMatrix(eye, [0, 0.56, 0], [0, 1, 0]);
+
+      const steerYaw = steerDemo ? Math.sin(clockTime * 2.4) * 0.28 : 0.0;
+      const pulse = 1.0 + Math.sin(clockTime * 6.5) * 0.06 + Math.sin(clockTime * 2.1) * 0.05;
+
+      gl.uniformMatrix4fv(uProjLoc, false, proj);
+      gl.uniformMatrix4fv(uViewLoc, false, view);
+      gl.uniform3fv(uCamPosLoc, eye);
+      gl.uniform1f(uNightLoc, nightMode ? 1.0 : 0.0);
+      gl.uniform3f(uHlCfgLoc, cfg.hlX + shiftX, cfg.hlY, cfg.hlZ);
+      gl.uniform1f(uRearXLoc, cfg.rearX + shiftX);
+      gl.uniform1f(uSteerYawLoc, steerYaw);
+      gl.uniform1f(uPulseLoc, pulse);
+
+      buildSceneGeometry(currentSpecId);
+
+      // 1º Passo: Malha 3D Sólida Opaca com Z-Buffer Completo
+      gl.disable(gl.BLEND);
+      gl.depthMask(true);
+      gl.uniform1f(uPassLoc, 0.0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.TRIANGLES, 0, verts.length / 11);
+
+      // 2º Passo: Feixes Volumétricos 3D Translúcidos dos Faróis Dianteiros (Additive Blending)
+      if (nightMode && transVerts.length > 0) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        gl.depthMask(false);
+        gl.uniform1f(uPassLoc, 1.0);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(transVerts), gl.DYNAMIC_DRAW);
+        gl.drawArrays(gl.TRIANGLES, 0, transVerts.length / 11);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+      }
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    function updateUI() {
+      const s = SPECS[currentSpecId];
+      document.getElementById('truck-badge').textContent = s.badge;
+      document.getElementById('truck-title').textContent = s.name;
+      document.getElementById('truck-desc').textContent = s.desc;
+      document.getElementById('spec-cap').textContent = s.cap;
+      document.getElementById('spec-speed').textContent = s.speed;
+      document.getElementById('spec-axles').textContent = s.axles;
+      document.getElementById('spec-price').textContent = s.price;
+
+      for (let i = 1; i <= 5; i++) {
+        const btn = document.getElementById('btn-m' + i);
+        if (i === currentSpecId) {
+          btn.className = 'px-2.5 py-1 rounded text-xs font-semibold transition bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded text-xs font-semibold transition text-[var(--muted-foreground)] hover:text-[var(--foreground)]';
+        }
+      }
+
+      const cargos = ['Grãos', 'Madeira Bruta', 'Combustível', 'Materiais de Construção', 'Alimentos Processados', 'Vazio'];
+      cargos.forEach(c => {
+        const btn = document.getElementById('cg-' + c);
+        if (!btn) return;
+        if (c === currentCargo) {
+          btn.className = 'px-2 py-1 rounded border border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold transition';
+        } else {
+          btn.className = 'px-2 py-1 rounded border border-[var(--border)] bg-[var(--secondary)]/50 text-[var(--foreground)] hover:bg-[var(--secondary)] transition';
+        }
+      });
+
+      document.getElementById('btn-steer').textContent = steerDemo ? '🛞 Direção: Esterçando' : '🛞 Direção: Reta';
+      document.getElementById('btn-paint').textContent = `🎨 Pintura #${paintVariant + 1}`;
+      document.getElementById('btn-night').textContent = nightMode ? '☀️ Modo Dia' : '🌙 Faróis / Noite';
+    }
+
+    function selectModel(id) { currentSpecId = id; zoomFactor = 1.0; updateUI(); }
+    function setCargo(cargo) { currentCargo = cargo; updateUI(); }
+    function toggleSteerDemo() { steerDemo = !steerDemo; updateUI(); }
+    function togglePaint() { paintVariant = (paintVariant + 1) % 2; updateUI(); }
+    function toggleNight() { nightMode = !nightMode; updateUI(); }
+
+    updateUI();
+    renderFrame();
+  </script>
+</body>
+</html>

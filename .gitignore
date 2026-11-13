@@ -1,0 +1,18 @@
+# Visual Studio / .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/
+.idea/
+
+# Godot 4
+.godot/
+*.translation
+
+# Logs e builds
+*.log
+*.tmp
+

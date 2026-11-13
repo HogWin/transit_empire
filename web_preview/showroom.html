@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transit Empire 3D — Showroom da Frota & Inspetor de Pneus R22.5</title>
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --panel-bg: rgba(15, 23, 42, 0.90);
+            --accent-blue: #38bdf8;
+            --accent-green: #4ade80;
+            --accent-gold: #fbbf24;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            height: 62px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 22px;
+            z-index: 20;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand-icon {
+            font-size: 24px;
+            background: linear-gradient(135deg, #0284c7, #1e3a8a);
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+        }
+        .brand-title { font-size: 16px; font-weight: 800; letter-spacing: 0.4px; }
+        .brand-sub { font-size: 11px; color: var(--text-muted); }
+
+        .model-tabs {
+            display: flex;
+            gap: 6px;
+            background: #0f172a;
+            padding: 5px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .btn {
+            background: #1e293b;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 7px 13px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { background: #334155; border-color: #64748b; }
+        .btn.active {
+            background: #0284c7;
+            border-color: var(--accent-blue);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+        }
+        .btn.back-game {
+            background: linear-gradient(135deg, #16a34a, #15803d);
+            border-color: #4ade80;
+            color: #fff;
+        }
+
+        #viewport {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 62px);
+        }
+        #webgl {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+        #webgl:active { cursor: grabbing; }
+
+        .info-card {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 350px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+            pointer-events: auto;
+        }
+        .badge {
+            display: inline-block;
+            background: #0f172a;
+            border: 1px solid var(--accent-blue);
+            color: var(--accent-blue);
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .truck-name { font-size: 19px; font-weight: 800; margin: 6px 0 4px; }
+        .truck-desc { font-size: 12px; color: var(--text-muted); line-height: 1.45; margin-bottom: 12px; }
+        .spec-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            border-top: 1px solid #1e293b;
+            padding-top: 10px;
+        }
+        .spec-box {
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid #1e293b;
+            border-radius: 7px;
+            padding: 7px 10px;
+        }
+        .spec-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; display: block; }
+        .spec-val { font-size: 13px; font-weight: 700; color: var(--text-main); margin-top: 2px; display: block; }
+
+        .camera-presets {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .preset-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--accent-gold);
+            letter-spacing: 0.6px;
+            margin-bottom: 2px;
+        }
+
+        .bottom-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            justify-content: center;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65);
+            max-width: 96vw;
+        }
+        .control-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .section-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-right: 2px;
+        }
+        .divider {
+            width: 1px;
+            height: 26px;
+            background: var(--border-color);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <div class="brand-icon">🛞</div>
+            <div>
+                <div class="brand-title">Transit Empire 3D — Showroom Oficial da Frota</div>
+                <div class="brand-sub">Modelagem 3D Estilizada + Pneus Radiais 295/80 R22.5 Esculpidos em Torno (LatheGeometry)</div>
+            </div>
+        </div>
+
+        <div class="model-tabs">
+            <button class="btn" id="tab-1" onclick="selectTruck(1)">🚐 1. Ford F-4000</button>
+            <button class="btn active" id="tab-2" onclick="selectTruck(2)">🚚 2. Scania 113H</button>
+            <button class="btn" id="tab-3" onclick="selectTruck(3)">🚛 3. MB L-1620</button>
+            <button class="btn" id="tab-4" onclick="selectTruck(4)">🚜 4. Volvo FH 540</button>
+            <button class="btn" id="tab-5" onclick="selectTruck(5)">🏁 5. Peterbilt 389</button>
+        </div>
+
+        <a href="index.html" class="btn back-game">🎮 Voltar ao Jogo (index.html)</a>
+    </header>
+
+    <div id="viewport">
+        <canvas id="webgl"></canvas>
+
+        <!-- Painel de Especificações do Modelo -->
+        <div class="info-card">
+            <span class="badge" id="ui-badge">4x2 Clássico 113H Série 3 • Nível 1</span>
+            <div class="truck-name" id="ui-name">🚚 Clássico 113H TopLine 360</div>
+            <p class="truck-desc" id="ui-desc">
+                Ícone estradeiro Azul Celeste com as 3 faixas anos 90 (Rosa, Roxo e Azul Escuro), capô reto Série 3, grade frisada e pneus radiais 295/80 R22.5 com roda 10 furos.
+            </p>
+            <div class="spec-grid">
+                <div class="spec-box">
+                    <span class="spec-label">Capacidade de Carga</span>
+                    <span class="spec-val" id="ui-cap" style="color:#38bdf8;">28 unidades</span>
+                </div>
+                <div class="spec-box">
+                    <span class="spec-label">Velocidade Máxima</span>
+                    <span class="spec-val" id="ui-speed" style="color:#4ade80;">75 km/h</span>
+                </div>
+                <div class="spec-box">
+                    <span class="spec-label">Configuração de Eixos</span>
+                    <span class="spec-val" id="ui-axles" style="color:#fbbf24;">4x2 (Traseiro Duplo)</span>
+                </div>
+                <div class="spec-box">
+                    <span class="spec-label">Valor na Concessionária</span>
+                    <span class="spec-val" id="ui-price">R$ 12.000</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Câmeras Rápidas (Incluindo Macro Zoom na Roda/Pneu!) -->
+        <div class="camera-presets">
+            <div class="preset-title">🎥 Ângulos de Inspeção</div>
+            <button class="btn" onclick="setCameraView('overview')">🚛 Visão Geral 3/4</button>
+            <button class="btn" onclick="setCameraView('frontWheel')">🔍 Zoom: Roda Dianteira & Pneu</button>
+            <button class="btn" onclick="setCameraView('rearDual')">🔍 Zoom: Rodado Duplo & Cubo</button>
+            <button class="btn" onclick="setCameraView('cabin')">🪪 Close-up: Cabine & Grade</button>
+            <button class="btn" id="btn-turntable" onclick="toggleTurntable()">🔄 Giro Automático: OFF</button>
+        </div>
+
+        <!-- Barra Inferior de Customização e Física -->
+        <div class="bottom-bar">
+            <div class="control-section">
+                <span class="section-label">📦 Carga 3D:</span>
+                <button class="btn" id="cg-Grãos" onclick="setCargo('Grãos')">🌾 Grãos</button>
+                <button class="btn active" id="cg-Madeira Bruta" onclick="setCargo('Madeira Bruta')">🪵 Madeira</button>
+                <button class="btn" id="cg-Combustível" onclick="setCargo('Combustível')">🛢️ Combustível</button>
+                <button class="btn" id="cg-Materiais de Construção" onclick="setCargo('Materiais de Construção')">🧱 Construção</button>
+                <button class="btn" id="cg-Alimentos Processados" onclick="setCargo('Alimentos Processados')">🥫 Alimentos</button>
+                <button class="btn" id="cg-Vazio" onclick="setCargo('Vazio')">Vazio</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="control-section">
+                <span class="section-label">🛞 Velocidade da Roda:</span>
+                <input type="range" id="wheel-speed" min="0" max="100" value="45" style="width:90px; accent-color:#38bdf8; cursor:pointer;">
+                <button class="btn" id="btn-steer" onclick="toggleSteer()">🛞 Esterçar: OFF</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="control-section">
+                <button class="btn" id="btn-paint" onclick="togglePaint()">🎨 Pintura #1</button>
+                <button class="btn" id="btn-night" onclick="toggleNight()">🌙 Faróis / Noite</button>
+                <button class="btn" onclick="exportCurrentTruckGLB()" style="background:linear-gradient(135deg,#0284c7,#1d4ed8);border-color:#38bdf8;color:#fff;">📥 Exportar .GLB (Godot/Unity)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CATALOG = {
+            1: {
+                name: "🚐 Utilitário F-4000 Carga Seca",
+                badge: "4x2 Ford F-4000 • Nível 1",
+                desc: "Inspirado na clássica Ford F-4000: capô Série F com Power Dome, grade cromada dupla, giroflex âmbar e carroceria de madeira maciça 100% fechada.",
+                cap: "12 unidades", speed: "65 km/h", axles: "4x2 (Rodado Duplo)", price: "R$ 5.000"
+            },
+            2: {
+                name: "🚚 Scania 113H TopLine 360",
+                badge: "4x2 Clássico 113H Série 3 • Nível 1",
+                desc: "Ícone estradeiro Azul Celeste com as 3 faixas anos 90 (Rosa, Roxo e Azul Escuro), capô Série 3, filtro de ar lateral e carroceria Guerra fechada.",
+                cap: "28 unidades", speed: "75 km/h", axles: "4x2 (6 Pneus R22.5)", price: "R$ 12.000"
+            },
+            3: {
+                name: "🚛 Mercedes-Benz L-1620 Bicudo",
+                badge: "4x2 Rei da Estrada • Nível 2",
+                desc: "Inspirado no lendário MB L-1620: capô arredondado inclinado, grade preta com barra cromada e emblema central, faixa branca e 2 cornetas no teto.",
+                cap: "45 unidades", speed: "80 km/h", axles: "4x2 (6 Pneus R22.5)", price: "R$ 24.000"
+            },
+            4: {
+                name: "🚜 Volvo FH 540 Globetrotter 6x2",
+                badge: "6x2 Cara-Chata Globetrotter • Nível 3",
+                desc: "Cabine avançada europeia com testeira iluminada GLOBETROTTER, barra de 4 milhas LED, saias laterais integrais (Full Side-Skirts) e tandem 6x2.",
+                cap: "80 unidades", speed: "85 km/h", axles: "6x2 (10 Pneus R22.5)", price: "R$ 48.000"
+            },
+            5: {
+                name: "🏁 Peterbilt 389 Bi-Trem King",
+                badge: "Bi-Trem 5 Eixos American King • Nível 4",
+                desc: "Clássico norte-americano Preto Ônix & Faixa Dourada com capô longo, grade vertical cromada, bullbar, chaminés duplas e 2 semirreboques fechados.",
+                cap: "150 unidades", speed: "95 km/h", axles: "5 Eixos (18 Pneus R22.5)", price: "R$ 95.000"
+            }
+        };
+
+        let scene, camera, renderer, controls, hemiLight, dirLight, spotLight;
+        let pedestalGroup, roadStripes = [];
+        let truckRoot = null, activeWheels = [], activeSteerPivots = [];
+        let currentSpecId = 2;
+        let currentCargo = 'Madeira Bruta';
+        let paintIndex = 0;
+        let nightMode = false;
+        let steerActive = false;
+        let turntableActive = false;
+
+        const materials = {
+            truckCabinBlue: new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.45, roughness: 0.28 }),
+            truckCabinRed: new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.45, roughness: 0.28 }),
+            truckCabinGreen: new THREE.MeshStandardMaterial({ color: 0x15803d, metalness: 0.45, roughness: 0.28 }),
+            truckCabinOrange: new THREE.MeshStandardMaterial({ color: 0xea580c, metalness: 0.45, roughness: 0.28 }),
+            truckCabinBlack: new THREE.MeshStandardMaterial({ color: 0x18181b, metalness: 0.45, roughness: 0.28 }),
+            scania113Blue: new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.38, roughness: 0.25 }),
+            scania113Pink: new THREE.MeshBasicMaterial({ color: 0xec4899 }),
+            scania113Purple: new THREE.MeshBasicMaterial({ color: 0x7c3aed }),
+            scania113DarkBlue: new THREE.MeshBasicMaterial({ color: 0x1e3a8a }),
+            wallWhite: new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.25, roughness: 0.35 }),
+            garageDoorYellow: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 }),
+            roadStripeYellow: new THREE.MeshBasicMaterial({ color: 0xfacc15 }),
+            truckWindshield: new THREE.MeshStandardMaterial({ color: 0x1e3a5f, metalness: 0.85, roughness: 0.12 }),
+            truckChrome: new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.95, roughness: 0.12 }),
+            // Pneu de borracha vulcanizada preta fosca + fundo de sulco mais escuro + roda de aço/Alcoa acetinada
+            truckTire: new THREE.MeshStandardMaterial({ color: 0x1c1f24, roughness: 0.88, metalness: 0.06 }),
+            tireTreadLug: new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 0.96, metalness: 0.02 }),
+            truckWheelRim: new THREE.MeshStandardMaterial({ color: 0xd4d8e0, metalness: 0.82, roughness: 0.22 }),
+            wheelBrakeDrum: new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.65, metalness: 0.45 }),
+            truckHeadlight: new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfff08a, emissiveIntensity: 0.95 }),
+            truckTaillight: new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.95 }),
+            truckBedWood: new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.88 }),
+            truckBedStake: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6, metalness: 0.3 }),
+            truckCargoGrain: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.85 }),
+            woodLogs: new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 }),
+            truckCargoWoodEnd: new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.7 }),
+            truckCargoStrap: new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5 }),
+            truckCargoTanker: new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.85, roughness: 0.2 }),
+            oilTankRedStripe: new THREE.MeshBasicMaterial({ color: 0xef4444 }),
+            truckCargoCrate: new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.75 }),
+            truckCargoBricks: new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.85 }),
+            truckCargoCement: new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.8 }),
+            containerBlue: new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 }),
+            containerRed: new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.5 }),
+            containerYellow: new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.5 })
+        };
+
+        // =========================================================================
+        // 🛞 GERADOR DE PNEU RADIAL 295/80 R22.5 ESCULPIDO EM TORNO (LATHEGEOMETRY)
+        // =========================================================================
+        const _wheelGeoCache = {};
+
+        function getRealisticWheelGeometries(wheelScale) {
+            const key = wheelScale.toFixed(3);
+            if (_wheelGeoCache[key]) return _wheelGeoCache[key];
+
+            const rTire = 0.24 * wheelScale;
+            const rRim = 0.134 * wheelScale;
+            const rHub = 0.050 * wheelScale;
+            const halfW = 0.076 * wheelScale;
+
+            // Perfil transversal 2D de um pneu radial real 295/80 R22.5 (Talão -> Bochecha Abaulada -> Ombro Redondo -> 4 Sulcos Circunferenciais -> Ombro -> Bochecha)
+            const tirePts = [
+                new THREE.Vector2(rRim, -halfW * 0.82),
+                new THREE.Vector2(rRim + (rTire - rRim) * 0.28, -halfW * 0.98),
+                new THREE.Vector2(rRim + (rTire - rRim) * 0.55, -halfW * 1.03), // Abaulamento natural da bochecha radial
+                new THREE.Vector2(rRim + (rTire - rRim) * 0.84, -halfW * 0.94),
+                new THREE.Vector2(rTire * 0.975, -halfW * 0.80),                // Ombro chanfrado arredondado
+                new THREE.Vector2(rTire, -halfW * 0.66),                        // Banda externa
+                new THREE.Vector2(rTire, -halfW * 0.44),
+                new THREE.Vector2(rTire * 0.962, -halfW * 0.41),                // 1º Sulco de drenagem profundo
+                new THREE.Vector2(rTire * 0.962, -halfW * 0.33),
+                new THREE.Vector2(rTire, -halfW * 0.30),                        // Banda intermediária
+                new THREE.Vector2(rTire, -halfW * 0.06),
+                new THREE.Vector2(rTire * 0.962, -halfW * 0.03),                // Sulco central
+                new THREE.Vector2(rTire * 0.962,  halfW * 0.03),
+                new THREE.Vector2(rTire,  halfW * 0.06),                        // Banda intermediária
+                new THREE.Vector2(rTire,  halfW * 0.30),
+                new THREE.Vector2(rTire * 0.962,  halfW * 0.33),                // 3º Sulco de drenagem profundo
+                new THREE.Vector2(rTire * 0.962,  halfW * 0.41),
+                new THREE.Vector2(rTire,  halfW * 0.44),                        // Banda interna
+                new THREE.Vector2(rTire,  halfW * 0.66),
+                new THREE.Vector2(rTire * 0.975,  halfW * 0.80),                // Ombro chanfrado arredondado
+                new THREE.Vector2(rRim + (rTire - rRim) * 0.84,  halfW * 0.94),
+                new THREE.Vector2(rRim + (rTire - rRim) * 0.55,  halfW * 1.03), // Abaulamento da bochecha
+                new THREE.Vector2(rRim + (rTire - rRim) * 0.28,  halfW * 0.98),
+                new THREE.Vector2(rRim,  halfW * 0.82)
+            ];
+            const latheTireGeo = new THREE.LatheGeometry(tirePts, 48);
+            latheTireGeo.rotateX(Math.PI / 2);
+
+            const grooveRingGeo = new THREE.CylinderGeometry(rTire * 0.972, rTire * 0.972, 0.011 * wheelScale, 48);
+            grooveRingGeo.rotateX(Math.PI / 2);
+
+            // Micro-entalhes transversais nos ombros do pneu (embutidos no raio do ombro para manter o pneu 100% redondo)
+            const shoulderBlockGeo = new THREE.BoxGeometry(0.018 * wheelScale, 0.012 * wheelScale, halfW * 1.48);
+
+            // Aro e Prato da Roda 22.5"
+            const rimBarrelGeo = new THREE.CylinderGeometry(rRim * 1.01, rRim * 1.01, halfW * 1.68, 36);
+            rimBarrelGeo.rotateX(Math.PI / 2);
+            const rimLipGeo = new THREE.TorusGeometry(rRim * 0.99, 0.011 * wheelScale, 12, 36);
+            const discPlateGeo = new THREE.CylinderGeometry(rRim * 0.95, rRim * 0.95, 0.016, 36);
+            discPlateGeo.rotateX(Math.PI / 2);
+            const ventHoleGeo = new THREE.CylinderGeometry(0.0155 * wheelScale, 0.0155 * wheelScale, 0.022, 16);
+            ventHoleGeo.rotateX(Math.PI / 2);
+            const lugNutGeo = new THREE.CylinderGeometry(0.0075 * wheelScale, 0.0075 * wheelScale, 0.024, 6);
+            lugNutGeo.rotateX(Math.PI / 2);
+            const hubBodyGeo = new THREE.CylinderGeometry(rHub * 0.90, rHub * 1.06, 0.068, 24);
+            hubBodyGeo.rotateX(Math.PI / 2);
+            const hubRibGeo = new THREE.BoxGeometry(rHub * 1.72, 0.012 * wheelScale, 0.014);
+
+            _wheelGeoCache[key] = {
+                rTire, rRim, rHub, halfW,
+                latheTireGeo, grooveRingGeo, shoulderBlockGeo,
+                rimBarrelGeo, rimLipGeo, discPlateGeo, ventHoleGeo, lugNutGeo, hubBodyGeo, hubRibGeo
+            };
+            return _wheelGeoCache[key];
+        }
+
+        function createRealisticWheelAssembly(wp, wheelScale) {
+            const g = getRealisticWheelGeometries(wheelScale);
+            const steerPivot = new THREE.Group();
+            steerPivot.position.set(wp.x, g.rTire, wp.z);
+
+            const wGroup = new THREE.Group();
+            const outSign = wp.z >= 0 ? 1 : -1;
+
+            function buildSingleRadialTire() {
+                const tGrp = new THREE.Group();
+                const carcass = new THREE.Mesh(g.latheTireGeo, materials.truckTire);
+                carcass.castShadow = true;
+                carcass.receiveShadow = true;
+                tGrp.add(carcass);
+
+                for (let gz of [-g.halfW * 0.37, 0, g.halfW * 0.37]) {
+                    const grv = new THREE.Mesh(g.grooveRingGeo, materials.tireTreadLug);
+                    grv.position.z = gz;
+                    tGrp.add(grv);
+                }
+
+                const numBlocks = 24;
+                for (let i = 0; i < numBlocks; i++) {
+                    const ang = (i / numBlocks) * Math.PI * 2;
+                    const blk = new THREE.Mesh(g.shoulderBlockGeo, materials.tireTreadLug);
+                    blk.position.set(
+                        Math.cos(ang) * (g.rTire * 0.991),
+                        Math.sin(ang) * (g.rTire * 0.991),
+                        0
+                    );
+                    blk.rotation.z = ang;
+                    tGrp.add(blk);
+                }
+                return tGrp;
+            }
+
+            wGroup.add(buildSingleRadialTire());
+            if (wp.isDual) {
+                const twin = buildSingleRadialTire();
+                twin.position.z = -outSign * (g.halfW * 2.18);
+                wGroup.add(twin);
+            }
+
+            const barrel = new THREE.Mesh(g.rimBarrelGeo, materials.wheelBrakeDrum);
+            const lip = new THREE.Mesh(g.rimLipGeo, materials.truckChrome);
+            lip.position.z = outSign * (g.halfW * 0.84);
+            wGroup.add(barrel, lip);
+
+            const dishZ = wp.isDual ? (outSign * (g.halfW * 0.45)) : (outSign * (g.halfW * 0.74));
+            const disc = new THREE.Mesh(g.discPlateGeo, materials.truckWheelRim);
+            disc.position.z = dishZ;
+            wGroup.add(disc);
+
+            const numHoles = 10;
+            for (let h = 0; h < numHoles; h++) {
+                const hAng = (h / numHoles) * Math.PI * 2;
+                const hole = new THREE.Mesh(g.ventHoleGeo, materials.tireTreadLug);
+                hole.position.set(
+                    Math.cos(hAng) * (g.rRim * 0.68),
+                    Math.sin(hAng) * (g.rRim * 0.68),
+                    dishZ + outSign * 0.003
+                );
+                const nut = new THREE.Mesh(g.lugNutGeo, materials.truckChrome);
+                nut.position.set(
+                    Math.cos(hAng) * (g.rRim * 0.44),
+                    Math.sin(hAng) * (g.rRim * 0.44),
+                    dishZ + outSign * 0.009
+                );
+                wGroup.add(hole, nut);
+            }
+
+            const hubCap = new THREE.Mesh(g.hubBodyGeo, wp.isDual ? materials.wheelBrakeDrum : materials.truckChrome);
+            hubCap.position.z = outSign * (g.halfW * 0.78);
+            wGroup.add(hubCap);
+
+            for (let r = 0; r < 3; r++) {
+                const rib = new THREE.Mesh(g.hubRibGeo, materials.truckChrome);
+                rib.position.z = outSign * (g.halfW * 0.78 + 0.035);
+                rib.rotation.z = (r / 3) * Math.PI;
+                wGroup.add(rib);
+            }
+
+            const valve = new THREE.Mesh(g.lugNutGeo, materials.roadStripeYellow);
+            valve.position.set(g.rRim * 0.84, 0, outSign * (g.halfW * 0.80));
+            wGroup.add(valve);
+
+            steerPivot.add(wGroup);
+            return { steerPivot, wGroup };
+        }
+
+        function createSingleCargoPayloadMesh(cargoType) {
+            const group = new THREE.Group();
+            if (cargoType === 'Grãos') {
+                const sackGeo = new THREE.BoxGeometry(0.28, 0.14, 0.22);
+                for (let layer = 0; layer < 3; layer++) {
+                    const cols = 3 - (layer === 2 ? 1 : 0);
+                    for (let r = 0; r < cols; r++) {
+                        for (let c = 0; c < 2; c++) {
+                            const sack = new THREE.Mesh(sackGeo, materials.truckCargoGrain);
+                            sack.position.set(-0.35 + r * 0.32 + (layer * 0.05), 0.1 + layer * 0.13, -0.14 + c * 0.28);
+                            sack.rotation.y = (Math.random() - 0.5) * 0.15;
+                            sack.castShadow = true;
+                            group.add(sack);
+                        }
+                    }
+                }
+            } else if (cargoType === 'Madeira Bruta') {
+                const logPositions = [[0.10, -0.22], [0.10, 0], [0.10, 0.22], [0.26, -0.11], [0.26, 0.11], [0.42, 0]];
+                logPositions.forEach(([py, pz]) => {
+                    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.25, 10), materials.woodLogs);
+                    log.rotation.z = Math.PI / 2;
+                    log.position.set(0, py, pz);
+                    log.castShadow = true;
+                    group.add(log);
+                    for (let side of [-0.63, 0.63]) {
+                        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.02, 10), materials.truckCargoWoodEnd);
+                        ring.rotation.z = Math.PI / 2;
+                        ring.position.set(side, py, pz);
+                        group.add(ring);
+                    }
+                });
+                for (let sx of [-0.35, 0.35]) {
+                    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.42, 0.58), materials.truckCargoStrap);
+                    strap.position.set(sx, 0.22, 0);
+                    group.add(strap);
+                }
+            } else if (cargoType === 'Combustível') {
+                const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 1.25, 20), materials.truckCargoTanker);
+                tank.rotation.z = Math.PI / 2;
+                tank.position.set(0, 0.30, 0);
+                tank.castShadow = true;
+                group.add(tank);
+                const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.10, 0.65), materials.oilTankRedStripe);
+                stripe.position.set(0, 0.30, 0);
+                group.add(stripe);
+            } else if (cargoType === 'Materiais de Construção') {
+                const pallet = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.06, 0.58), materials.truckCargoCrate);
+                pallet.position.set(-0.32, 0.05, 0);
+                const bricks = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.30, 0.52), materials.truckCargoBricks);
+                bricks.position.set(-0.32, 0.23, 0);
+                bricks.castShadow = true;
+                group.add(pallet, bricks);
+                for (let side of [-0.15, 0.15]) {
+                    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.28, 0.18), materials.truckCargoCement);
+                    beam.position.set(0.28, 0.18, side);
+                    beam.castShadow = true;
+                    group.add(beam);
+                }
+            } else if (cargoType === 'Alimentos Processados') {
+                const boxMats = [materials.containerBlue, materials.containerRed, materials.containerYellow];
+                for (let i = 0; i < 4; i++) {
+                    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.28), boxMats[i % boxMats.length]);
+                    crate.position.set(i < 2 ? -0.32 : 0.18, 0.18, (i % 2 === 0) ? -0.15 : 0.15);
+                    crate.castShadow = true;
+                    group.add(crate);
+                }
+            }
+            return group;
+        }
+
+        function createTruckCargoGroup(cargoType, specId) {
+            const container = new THREE.Group();
+            if (specId === 1) {
+                const p = createSingleCargoPayloadMesh(cargoType);
+                p.position.set(-0.38, 0.46, 0);
+                p.scale.set(0.72, 0.78, 0.85);
+                container.add(p);
+            } else if (specId === 2) {
+                const p = createSingleCargoPayloadMesh(cargoType);
+                p.position.set(-0.52, 0.48, 0);
+                p.scale.set(0.96, 0.95, 0.96);
+                container.add(p);
+            } else if (specId === 3) {
+                const p = createSingleCargoPayloadMesh(cargoType);
+                p.position.set(-0.56, 0.48, 0);
+                p.scale.set(1.08, 1.0, 1.0);
+                container.add(p);
+            } else if (specId === 4) {
+                const p = createSingleCargoPayloadMesh(cargoType);
+                p.position.set(-0.68, 0.50, 0);
+                p.scale.set(1.30, 1.12, 1.06);
+                container.add(p);
+            } else {
+                const pf = createSingleCargoPayloadMesh(cargoType);
+                pf.position.set(-0.18, 0.52, 0);
+                pf.scale.set(0.92, 1.12, 1.05);
+                const pr = createSingleCargoPayloadMesh(cargoType);
+                pr.position.set(-1.68, 0.52, 0);
+                pr.scale.set(0.92, 1.12, 1.05);
+                container.add(pf, pr);
+            }
+            return container;
+        }
+
+        // Constrói uma carroceria graneleira/carga seca SÓLIDA E FECHADA (estilo Guerra/Randon/Facchini, sem frestas vazadas)
+        function addStylizedOpenCargoBed(parentGroup, centerX, floorY, lengthX, widthZ, stakeHeight, stakeColorMat, hasRearLights = true) {
+            const subframe = new THREE.Mesh(new THREE.BoxGeometry(lengthX - 0.04, 0.16, widthZ * 0.62), materials.tireTreadLug);
+            subframe.position.set(centerX, floorY - 0.08, 0);
+            subframe.castShadow = true;
+            parentGroup.add(subframe);
+
+            const bedFloor = new THREE.Mesh(new THREE.BoxGeometry(lengthX, 0.09, widthZ), materials.truckBedWood);
+            bedFloor.position.set(centerX, floorY, 0);
+            bedFloor.receiveShadow = true;
+            bedFloor.castShadow = true;
+            parentGroup.add(bedFloor);
+
+            const frontWall = new THREE.Mesh(new THREE.BoxGeometry(0.08, stakeHeight + 0.18, widthZ), stakeColorMat);
+            frontWall.position.set(centerX + lengthX / 2 - 0.04, floorY + (stakeHeight + 0.18) / 2, 0);
+            frontWall.castShadow = true;
+            parentGroup.add(frontWall);
+
+            // Tampa Traseira Sólida + Para-choque Traseiro Homologado + Lanternas Traseiras Triplas Embutidas
+            const rearX = centerX - lengthX / 2;
+            const tailWall = new THREE.Mesh(new THREE.BoxGeometry(0.08, stakeHeight * 0.92, widthZ), stakeColorMat);
+            tailWall.position.set(rearX + 0.04, floorY + (stakeHeight * 0.92) / 2, 0);
+            tailWall.castShadow = true;
+            parentGroup.add(tailWall);
+
+            if (hasRearLights) {
+                const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, widthZ * 0.94), materials.truckChrome);
+                rearBumper.position.set(rearX + 0.02, floorY - 0.19, 0);
+                parentGroup.add(rearBumper);
+
+                for (let rz of [-widthZ * 0.30, 0, widthZ * 0.30]) {
+                    const reflRed = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.038, 0.12), materials.truckTaillight);
+                    reflRed.position.set(rearX + 0.018, floorY - 0.19, rz - 0.04);
+                    const reflWhite = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.038, 0.08), materials.wallWhite);
+                    reflWhite.position.set(rearX + 0.018, floorY - 0.19, rz + 0.06);
+                    parentGroup.add(reflRed, reflWhite);
+                }
+
+                for (let side of [-1, 1]) {
+                    const bSupport = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), materials.tireTreadLug);
+                    bSupport.position.set(rearX + 0.04, floorY - 0.13, side * (widthZ * 0.36));
+
+                    const tlHousing = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.095, 0.24), materials.tireTreadLug);
+                    tlHousing.position.set(rearX + 0.015, floorY - 0.095, side * (widthZ * 0.33));
+
+                    const tlBrake = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.068, 0.082), materials.truckTaillight);
+                    tlBrake.position.set(rearX + 0.01, floorY - 0.095, side * (widthZ * 0.33 + 0.062));
+
+                    const tlTurn = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.068, 0.058), materials.roadStripeYellow);
+                    tlTurn.position.set(rearX + 0.01, floorY - 0.095, side * (widthZ * 0.33 - 0.014));
+
+                    const tlRev = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.068, 0.046), materials.wallWhite);
+                    tlRev.position.set(rearX + 0.01, floorY - 0.095, side * (widthZ * 0.33 - 0.072));
+
+                    const topMarker = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.032, 0.05), materials.truckTaillight);
+                    topMarker.position.set(rearX + 0.01, floorY + stakeHeight * 0.82, side * (widthZ * 0.44));
+
+                    parentGroup.add(bSupport, tlHousing, tlBrake, tlTurn, tlRev, topMarker);
+                }
+            }
+
+            for (let side of [-1, 1]) {
+                const panelZ = side * (widthZ / 2 - 0.03);
+                const solidSideWall = new THREE.Mesh(new THREE.BoxGeometry(lengthX - 0.04, stakeHeight, 0.055), materials.truckBedWood);
+                solidSideWall.position.set(centerX, floorY + stakeHeight / 2, panelZ);
+                solidSideWall.castShadow = true;
+                solidSideWall.receiveShadow = true;
+                parentGroup.add(solidSideWall);
+
+                const topRail = new THREE.Mesh(new THREE.BoxGeometry(lengthX, 0.045, 0.068), stakeColorMat);
+                topRail.position.set(centerX, floorY + stakeHeight, panelZ);
+                const midRail = new THREE.Mesh(new THREE.BoxGeometry(lengthX, 0.03, 0.065), stakeColorMat);
+                midRail.position.set(centerX, floorY + stakeHeight * 0.48, panelZ);
+                const lowerSkirt = new THREE.Mesh(new THREE.BoxGeometry(lengthX * 0.42, 0.12, 0.04), stakeColorMat);
+                lowerSkirt.position.set(centerX + lengthX * 0.18, floorY - 0.08, side * (widthZ / 2 - 0.04));
+                parentGroup.add(topRail, midRail, lowerSkirt);
+
+                const numStakes = Math.max(4, Math.floor(lengthX / 0.28));
+                const step = (lengthX - 0.12) / (numStakes - 1);
+                for (let i = 0; i < numStakes; i++) {
+                    const sx = (centerX - lengthX / 2 + 0.06) + i * step;
+                    const stake = new THREE.Mesh(new THREE.BoxGeometry(0.045, stakeHeight + 0.04, 0.072), stakeColorMat);
+                    stake.position.set(sx, floorY + stakeHeight / 2, panelZ);
+                    parentGroup.add(stake);
+                }
+            }
+        }
+
+        // Helper para criar cabine sólida com Colunas A/B, Molduras de Porta e Para-brisa Embutido (impede ver através da cabine)
+        function addFramedCabinWindows(parentGroup, cabX, cabY, cabW, cabH, cabD, cabMat) {
+            const interiorCore = new THREE.Mesh(new THREE.BoxGeometry(cabW * 0.92, cabH * 0.88, cabD * 0.92), materials.tireTreadLug);
+            interiorCore.position.set(cabX, cabY, 0);
+            parentGroup.add(interiorCore);
+
+            const wsH = cabH * 0.38;
+            const wsY = cabY + cabH * 0.18;
+            const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.08, wsH, cabD * 0.84), materials.truckWindshield);
+            windshield.position.set(cabX + cabW / 2 - 0.02, wsY, 0);
+            parentGroup.add(windshield);
+
+            for (let side of [-1, 1]) {
+                const aPillar = new THREE.Mesh(new THREE.BoxGeometry(0.09, wsH + 0.04, 0.07), cabMat);
+                aPillar.position.set(cabX + cabW / 2 - 0.02, wsY, side * (cabD / 2 - 0.03));
+                const sideWindow = new THREE.Mesh(new THREE.BoxGeometry(cabW * 0.62, wsH * 0.92, 0.06), materials.truckWindshield);
+                sideWindow.position.set(cabX + cabW * 0.06, wsY, side * (cabD / 2 - 0.015));
+                const doorHandle = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.03, 0.03), materials.truckChrome);
+                doorHandle.position.set(cabX - cabW * 0.12, cabY - cabH * 0.08, side * (cabD / 2 + 0.01));
+                parentGroup.add(aPillar, sideWindow, doorHandle);
+            }
+        }
+
+        function buildUnique3DTruckMesh(specId, truckIndex) {
+            const truckGroup = new THREE.Group();
+            let wheelPositions = [];
+            let wheelScale = 1.0;
+
+            if (specId === 1) {
+                // 🚐 MODELO 1: FORD F-4000 CARGA SECA
+                const cabMat = (truckIndex % 2 === 0) ? materials.truckCabinBlue : materials.wallWhite;
+                const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.12, 0.24, 0.68), materials.tireTreadLug);
+                chassis.position.set(0.06, 0.34, 0);
+                chassis.castShadow = true;
+                truckGroup.add(chassis);
+
+                const cab = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.68, 0.78), cabMat);
+                cab.position.set(0.44, 0.68, 0);
+                cab.castShadow = true;
+                truckGroup.add(cab);
+                addFramedCabinWindows(truckGroup, 0.44, 0.68, 0.66, 0.68, 0.78, cabMat);
+
+                const hood = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.40, 0.76), cabMat);
+                hood.position.set(0.96, 0.56, 0);
+                hood.castShadow = true;
+                const powerDome = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.06, 0.44), cabMat);
+                powerDome.position.set(0.95, 0.77, 0);
+                truckGroup.add(hood, powerDome);
+
+                const grilleBack = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.28, 0.68), materials.tireTreadLug);
+                grilleBack.position.set(1.20, 0.56, 0);
+                const grilleFrame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.26, 0.62), materials.truckChrome);
+                grilleFrame.position.set(1.21, 0.56, 0);
+                const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.15, 0.82), materials.truckChrome);
+                bumper.position.set(1.22, 0.35, 0);
+                truckGroup.add(grilleBack, grilleFrame, bumper);
+
+                for (let side of [-1, 1]) {
+                    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.14), materials.truckHeadlight);
+                    hl.position.set(1.22, 0.58, side * 0.26);
+                    const blinker = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.14), materials.roadStripeYellow);
+                    blinker.position.set(1.22, 0.48, side * 0.26);
+                    const stepBar = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.12, 0.10), materials.truckChrome);
+                    stepBar.position.set(0.44, 0.32, side * 0.39);
+                    const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.18, 0.05), materials.truckChrome);
+                    mirror.position.set(0.66, 0.80, side * 0.43);
+                    truckGroup.add(hl, blinker, stepBar, mirror);
+                }
+
+                const beaconBase = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.05, 12), materials.tireTreadLug);
+                beaconBase.position.set(0.44, 1.04, 0);
+                const beaconLight = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.11, 12), materials.roadStripeYellow);
+                beaconLight.position.set(0.44, 1.11, 0);
+                truckGroup.add(beaconBase, beaconLight);
+
+                addStylizedOpenCargoBed(truckGroup, -0.38, 0.45, 1.12, 0.80, 0.25, materials.truckBedStake);
+                wheelScale = 0.88;
+                wheelPositions = [
+                    { x: 0.84, z: 0.39, isSteer: true, isDual: false }, { x: 0.84, z: -0.39, isSteer: true, isDual: false },
+                    { x: -0.55, z: 0.39, isSteer: false, isDual: true }, { x: -0.55, z: -0.39, isSteer: false, isDual: true }
+                ];
+            } else if (specId === 2) {
+                // 🚚 MODELO 2: SCANIA 113H 360 TOPLINE BICUDO (Série 3)
+                const cabMat = (truckIndex % 2 === 0) ? materials.scania113Blue : materials.wallWhite;
+                const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.26, 0.74), materials.tireTreadLug);
+                chassis.position.set(-0.02, 0.36, 0);
+                chassis.castShadow = true;
+                truckGroup.add(chassis);
+
+                const cab = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.84, 0.82), cabMat);
+                cab.position.set(0.50, 0.78, 0);
+                cab.castShadow = true;
+                const topLineRoof = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.22, 0.78), cabMat);
+                topLineRoof.position.set(0.47, 1.29, 0);
+                topLineRoof.castShadow = true;
+                truckGroup.add(cab, topLineRoof);
+                addFramedCabinWindows(truckGroup, 0.50, 0.78, 0.70, 0.84, 0.82, cabMat);
+
+                const hood = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.56, 0.72), cabMat);
+                hood.position.set(1.09, 0.65, 0);
+                hood.castShadow = true;
+                const hoodInnerSplash = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.32, 0.66), materials.tireTreadLug);
+                hoodInnerSplash.position.set(1.06, 0.42, 0);
+                truckGroup.add(hood, hoodInnerSplash);
+
+                for (let side of [-1, 1]) {
+                    const fenderTop = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.10, 0.14), cabMat);
+                    fenderTop.position.set(1.06, 0.54, side * 0.39);
+                    const stepBox = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.20, 0.12), cabMat);
+                    stepBox.position.set(0.62, 0.36, side * 0.39);
+                    const sideTank = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.56, 16), materials.truckChrome);
+                    sideTank.rotation.x = Math.PI / 2;
+                    sideTank.position.set(0.18, 0.35, side * 0.39);
+
+                    const stripePink = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.045, 0.02), materials.scania113Pink);
+                    stripePink.position.set(0.76, 0.69, side * 0.42);
+                    const stripePurple = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.045, 0.02), materials.scania113Purple);
+                    stripePurple.position.set(0.76, 0.635, side * 0.42);
+                    const stripeNavy = new THREE.Mesh(new THREE.BoxGeometry(1.20, 0.045, 0.02), materials.scania113DarkBlue);
+                    stripeNavy.position.set(0.76, 0.58, side * 0.42);
+
+                    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.11, 0.16), materials.truckHeadlight);
+                    hl.position.set(1.40, 0.38, side * 0.28);
+                    const fog = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.10), materials.roadStripeYellow);
+                    fog.position.set(1.40, 0.29, side * 0.16);
+                    const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.24, 0.05), materials.tireTreadLug);
+                    mirror.position.set(0.74, 0.94, side * 0.46);
+                    truckGroup.add(fenderTop, stepBox, sideTank, stripePink, stripePurple, stripeNavy, hl, fog, mirror);
+                }
+
+                const grilleBack = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.46, 0.56), materials.tireTreadLug);
+                grilleBack.position.set(1.37, 0.65, 0);
+                truckGroup.add(grilleBack);
+                for (let gy of [0.48, 0.56, 0.64, 0.72, 0.80]) {
+                    const slat = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.032, 0.52), cabMat);
+                    slat.position.set(1.385, gy, 0);
+                    truckGroup.add(slat);
+                }
+
+                const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.20, 0.86), cabMat);
+                bumper.position.set(1.38, 0.35, 0);
+                const sunVisor = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.84), cabMat);
+                sunVisor.position.set(0.84, 1.18, 0);
+                const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.26, 12), materials.truckChrome);
+                stack.position.set(0.12, 1.06, -0.41);
+                const airCleaner = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.34, 12), materials.tireTreadLug);
+                airCleaner.position.set(0.82, 0.72, -0.44);
+                truckGroup.add(bumper, sunVisor, stack, airCleaner);
+
+                for (let lz of [-0.22, 0, 0.22]) {
+                    const roofLamp = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.06), materials.roadStripeYellow);
+                    roofLamp.position.set(0.76, 1.40, lz);
+                    truckGroup.add(roofLamp);
+                }
+
+                addStylizedOpenCargoBed(truckGroup, -0.52, 0.47, 1.54, 0.86, 0.29, materials.truckBedStake);
+                wheelScale = 1.0;
+                wheelPositions = [
+                    { x: 1.06, z: 0.43, isSteer: true, isDual: false }, { x: 1.06, z: -0.43, isSteer: true, isDual: false },
+                    { x: -0.82, z: 0.43, isSteer: false, isDual: true }, { x: -0.82, z: -0.43, isSteer: false, isDual: true }
+                ];
+            } else if (specId === 3) {
+                // 🚛 MODELO 3: MERCEDES-BENZ L-1620 BICUDO CLÁSSICO
+                const cabMat = (truckIndex % 2 === 0) ? materials.truckCabinGreen : materials.truckCabinBlue;
+                const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.70, 0.26, 0.74), materials.tireTreadLug);
+                chassis.position.set(-0.04, 0.36, 0);
+                chassis.castShadow = true;
+                truckGroup.add(chassis);
+
+                const cab = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.84, 0.82), cabMat);
+                cab.position.set(0.54, 0.78, 0);
+                cab.castShadow = true;
+                truckGroup.add(cab);
+                addFramedCabinWindows(truckGroup, 0.54, 0.78, 0.68, 0.84, 0.82, cabMat);
+
+                const snoutBase = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.46, 0.72), cabMat);
+                snoutBase.position.set(1.06, 0.60, 0);
+                snoutBase.castShadow = true;
+                const snoutSlope = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.14, 0.66), cabMat);
+                snoutSlope.position.set(1.04, 0.84, 0);
+                snoutSlope.rotation.z = -0.14;
+                const snoutSplash = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.30, 0.68), materials.tireTreadLug);
+                snoutSplash.position.set(1.04, 0.42, 0);
+                truckGroup.add(snoutBase, snoutSlope, snoutSplash);
+
+                const grilleMB = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.36, 0.56), materials.tireTreadLug);
+                grilleMB.position.set(1.33, 0.62, 0);
+                const chromeBar = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.54), materials.truckChrome);
+                chromeBar.position.set(1.34, 0.62, 0);
+                const starBadge = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 12), materials.truckChrome);
+                starBadge.rotation.z = Math.PI / 2;
+                starBadge.position.set(1.35, 0.62, 0);
+                const bumper = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.86), materials.truckChrome);
+                bumper.position.set(1.35, 0.36, 0);
+                const sunVisor = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.84), materials.truckChrome);
+                sunVisor.position.set(0.86, 1.16, 0);
+                const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.18, 12), materials.truckChrome);
+                exhaust.position.set(0.18, 1.05, 0.40);
+                truckGroup.add(grilleMB, chromeBar, starBadge, bumper, sunVisor, exhaust);
+
+                for (let side of [-1, 1]) {
+                    const frontFender = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.11, 0.15), cabMat);
+                    frontFender.position.set(1.02, 0.53, side * 0.39);
+                    const stripe1620 = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.06, 0.02), materials.wallWhite);
+                    stripe1620.position.set(0.76, 0.64, side * 0.42);
+                    const fuelTank = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.62, 16), materials.tireTreadLug);
+                    fuelTank.rotation.x = Math.PI / 2;
+                    fuelTank.position.set(0.16, 0.35, side * 0.39);
+                    const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.06, 0.38, 10), materials.truckChrome);
+                    horn.rotation.z = Math.PI / 2;
+                    horn.position.set(0.56, 1.24, side * 0.22);
+                    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.16), materials.truckHeadlight);
+                    hl.position.set(1.36, 0.38, side * 0.28);
+                    const blinker = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.10), materials.roadStripeYellow);
+                    blinker.position.set(1.36, 0.38, side * 0.39);
+                    truckGroup.add(frontFender, stripe1620, fuelTank, horn, hl, blinker);
+                }
+
+                addStylizedOpenCargoBed(truckGroup, -0.56, 0.47, 1.60, 0.88, 0.30, materials.truckBedStake);
+                wheelScale = 1.02;
+                wheelPositions = [
+                    { x: 1.02, z: 0.44, isSteer: true, isDual: false }, { x: 1.02, z: -0.44, isSteer: true, isDual: false },
+                    { x: -0.88, z: 0.44, isSteer: false, isDual: true }, { x: -0.88, z: -0.44, isSteer: false, isDual: true }
+                ];
+            } else if (specId === 4) {
+                // 🚜 MODELO 4: VOLVO FH 540 GLOBETROTTER 6x2
+                const cabMat = (truckIndex % 2 === 0) ? materials.truckCabinOrange : materials.truckCabinRed;
+                const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.28, 0.76), materials.tireTreadLug);
+                chassis.position.set(-0.12, 0.37, 0);
+                chassis.castShadow = true;
+                truckGroup.add(chassis);
+
+                const cabLower = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.90, 0.88), cabMat);
+                cabLower.position.set(0.78, 0.80, 0);
+                cabLower.castShadow = true;
+                const cabSleeperRoof = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.36, 0.84), cabMat);
+                cabSleeperRoof.position.set(0.74, 1.40, 0);
+                cabSleeperRoof.castShadow = true;
+                const globeSign = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.62), materials.wallWhite);
+                globeSign.position.set(1.19, 1.42, 0);
+                truckGroup.add(cabLower, cabSleeperRoof, globeSign);
+                addFramedCabinWindows(truckGroup, 0.78, 0.84, 0.98, 0.84, 0.88, cabMat);
+
+                const lightBar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.76), materials.truckChrome);
+                lightBar.position.set(1.21, 1.56, 0);
+                truckGroup.add(lightBar);
+                for (let lx of [-0.27, -0.09, 0.09, 0.27]) {
+                    const spot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), materials.truckHeadlight);
+                    spot.position.set(1.24, 1.56, lx);
+                    truckGroup.add(spot);
+                }
+
+                const grilleUpper = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.52, 0.70), materials.tireTreadLug);
+                grilleUpper.position.set(1.26, 0.58, 0);
+                const grilleChrome = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.44, 0.60), materials.truckChrome);
+                grilleChrome.position.set(1.27, 0.58, 0);
+                const bumperFH = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.88), cabMat);
+                bumperFH.position.set(1.26, 0.34, 0);
+                truckGroup.add(grilleUpper, grilleChrome, bumperFH);
+
+                for (let side of [-1, 1]) {
+                    const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.38, 12), materials.truckChrome);
+                    stack.position.set(0.24, 1.15, side * 0.41);
+                    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.20, 0.16), materials.truckHeadlight);
+                    hl.position.set(1.28, 0.42, side * 0.34);
+                    const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.28, 0.08), cabMat);
+                    skirt.position.set(0.05, 0.38, side * 0.42);
+                    const skirtStripe = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.04, 0.09), materials.truckChrome);
+                    skirtStripe.position.set(0.05, 0.38, side * 0.42);
+                    const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.28, 0.06), materials.tireTreadLug);
+                    mirror.position.set(1.12, 0.98, side * 0.48);
+                    truckGroup.add(stack, hl, skirt, skirtStripe, mirror);
+                }
+
+                addStylizedOpenCargoBed(truckGroup, -0.68, 0.49, 1.90, 0.92, 0.34, materials.truckBedStake);
+                wheelScale = 1.05;
+                wheelPositions = [
+                    { x: 0.92, z: 0.46, isSteer: true, isDual: false }, { x: 0.92, z: -0.46, isSteer: true, isDual: false },
+                    { x: -0.82, z: 0.46, isSteer: false, isDual: true }, { x: -0.82, z: -0.46, isSteer: false, isDual: true },
+                    { x: -1.30, z: 0.46, isSteer: false, isDual: true }, { x: -1.30, z: -0.46, isSteer: false, isDual: true }
+                ];
+            } else {
+                // 🏁 MODELO 5: PETERBILT 389 / KENWORTH W900 BI-TREM 5 EIXOS
+                const cabMat = materials.truckCabinBlack;
+                const accentMat = materials.roadStripeYellow;
+                const chassis = new THREE.Mesh(new THREE.BoxGeometry(4.08, 0.28, 0.76), materials.tireTreadLug);
+                chassis.position.set(-0.48, 0.37, 0);
+                chassis.castShadow = true;
+                truckGroup.add(chassis);
+
+                const cabBody = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.92, 0.90), cabMat);
+                cabBody.position.set(0.88, 0.84, 0);
+                cabBody.castShadow = true;
+                const kingRoof = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.34, 0.86), cabMat);
+                kingRoof.position.set(0.78, 1.43, 0);
+                kingRoof.castShadow = true;
+                const goldStripe = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.07, 0.91), accentMat);
+                goldStripe.position.set(1.14, 0.68, 0);
+                truckGroup.add(cabBody, kingRoof, goldStripe);
+                addFramedCabinWindows(truckGroup, 0.92, 0.86, 0.84, 0.86, 0.90, cabMat);
+
+                const longHood = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.62, 0.76), cabMat);
+                longHood.position.set(1.48, 0.68, 0);
+                longHood.castShadow = true;
+                const hoodInner = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.34, 0.72), materials.tireTreadLug);
+                hoodInner.position.set(1.44, 0.44, 0);
+                const chromeGrille = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.58, 0.56), materials.truckChrome);
+                chromeGrille.position.set(1.75, 0.68, 0);
+                const bullbar = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.38, 0.90), materials.truckChrome);
+                bullbar.position.set(1.79, 0.46, 0);
+                const visor = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.08, 0.90), materials.truckChrome);
+                visor.position.set(1.30, 1.24, 0);
+                truckGroup.add(longHood, hoodInner, chromeGrille, bullbar, visor);
+
+                for (let lz of [-0.30, -0.15, 0, 0.15, 0.30]) {
+                    const topLamp = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.07), materials.roadStripeYellow);
+                    topLamp.position.set(1.16, 1.61, lz);
+                    truckGroup.add(topLamp);
+                }
+
+                for (let side of [-1, 1]) {
+                    const frontFender = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.12, 0.16), cabMat);
+                    frontFender.position.set(1.42, 0.54, side * 0.40);
+                    const bigExhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 1.60, 12), materials.truckChrome);
+                    bigExhaust.position.set(0.46, 1.24, side * 0.45);
+                    const chromeTank = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.82, 16), materials.truckChrome);
+                    chromeTank.rotation.x = Math.PI / 2;
+                    chromeTank.position.set(0.86, 0.36, side * 0.43);
+                    const hlPod = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.16), materials.truckChrome);
+                    hlPod.position.set(1.72, 0.56, side * 0.34);
+                    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.12), materials.truckHeadlight);
+                    hl.position.set(1.76, 0.56, side * 0.34);
+                    truckGroup.add(frontFender, bigExhaust, chromeTank, hlPod, hl);
+                }
+
+                const dolly = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.16, 16), materials.truckChrome);
+                dolly.position.set(-0.93, 0.44, 0);
+                truckGroup.add(dolly);
+
+                addStylizedOpenCargoBed(truckGroup, -0.18, 0.50, 1.38, 0.92, 0.36, materials.truckBedStake, false);
+                addStylizedOpenCargoBed(truckGroup, -1.68, 0.50, 1.38, 0.92, 0.36, materials.truckBedStake, true);
+                wheelScale = 1.05;
+                wheelPositions = [
+                    { x: 1.42, z: 0.46, isSteer: true, isDual: false }, { x: 1.42, z: -0.46, isSteer: true, isDual: false },
+                    { x: 0.42, z: 0.46, isSteer: false, isDual: true }, { x: 0.42, z: -0.46, isSteer: false, isDual: true },
+                    { x: -0.58, z: 0.46, isSteer: false, isDual: true }, { x: -0.58, z: -0.46, isSteer: false, isDual: true },
+                    { x: -1.72, z: 0.46, isSteer: false, isDual: true }, { x: -1.72, z: -0.46, isSteer: false, isDual: true },
+                    { x: -2.18, z: 0.46, isSteer: false, isDual: true }, { x: -2.18, z: -0.46, isSteer: false, isDual: true }
+                ];
+            }
+
+            // Eixos Rígidos Sólidos, Diferenciais e Caixas de Roda Internas (Opacidade 100%)
+            for (let i = 0; i < wheelPositions.length; i += 2) {
+                const wp = wheelPositions[i];
+                const axleBar = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.055 * wheelScale, 0.055 * wheelScale, Math.abs(wp.z) * 1.95, 12),
+                    materials.tireTreadLug
+                );
+                axleBar.rotation.x = Math.PI / 2;
+                axleBar.position.set(wp.x, 0.24 * wheelScale, 0);
+                const diffPumpkin = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.11 * wheelScale, 12, 12),
+                    materials.tireTreadLug
+                );
+                diffPumpkin.position.set(wp.x, 0.24 * wheelScale, 0);
+                const wheelWellBlock = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.46 * wheelScale, 0.22 * wheelScale, Math.abs(wp.z) * 1.65),
+                    materials.tireTreadLug
+                );
+                wheelWellBlock.position.set(wp.x, 0.34 * wheelScale, 0);
+                truckGroup.add(axleBar, diffPumpkin, wheelWellBlock);
+            }
+
+            const wheelMeshes = [];
+            const steerGroups = [];
+            wheelPositions.forEach(wp => {
+                const { steerPivot, wGroup } = createRealisticWheelAssembly(wp, wheelScale);
+                truckGroup.add(steerPivot);
+                wheelMeshes.push(wGroup);
+                if (wp.isSteer) steerGroups.push(steerPivot);
+            });
+
+            // Faróis Dianteiros Volumétricos Duplos + Projeção no Asfalto (Idênticos ao Jogo Principal!)
+            const headlightBeams = new THREE.Group();
+            const hlSpecs = {
+                1: { fx: 1.25, hy: 0.58, hz: 0.26, rx: -0.94 },
+                2: { fx: 1.43, hy: 0.38, hz: 0.28, rx: -1.29, fogY: 0.29, fogZ: 0.16 },
+                3: { fx: 1.39, hy: 0.38, hz: 0.28, rx: -1.36 },
+                4: { fx: 1.31, hy: 0.42, hz: 0.34, rx: -1.63, roofY: 1.56 },
+                5: { fx: 1.79, hy: 0.56, hz: 0.34, rx: -2.37 }
+            };
+            const hCfg = hlSpecs[specId] || hlSpecs[2];
+
+            const outerConeGeo = new THREE.CylinderGeometry(0.055, 0.42, 2.35, 24, 1, true);
+            outerConeGeo.rotateZ(Math.PI / 2);
+            outerConeGeo.translate(2.35 / 2, 0, 0);
+
+            const coreConeGeo = new THREE.CylinderGeometry(0.032, 0.19, 1.65, 20, 1, true);
+            coreConeGeo.rotateZ(Math.PI / 2);
+            coreConeGeo.translate(1.65 / 2, 0, 0);
+
+            const outerBeamMat = new THREE.MeshBasicMaterial({
+                color: 0xfef08a,
+                transparent: true,
+                opacity: 0.20,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            const coreBeamMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.34,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            const poolMat = new THREE.MeshBasicMaterial({
+                color: 0xfef08a,
+                transparent: true,
+                opacity: 0.26,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            const rearGlowMat = new THREE.MeshBasicMaterial({
+                color: 0xef4444,
+                transparent: true,
+                opacity: 0.20,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            const beamPivots = [];
+            const flareGeo = new THREE.CircleGeometry(0.11, 16);
+            flareGeo.rotateY(Math.PI / 2);
+            const poolGeo = new THREE.CircleGeometry(0.46, 24);
+            poolGeo.rotateX(-Math.PI / 2);
+
+            for (let side of [-1, 1]) {
+                const bPivot = new THREE.Group();
+                bPivot.position.set(hCfg.fx, hCfg.hy, side * hCfg.hz);
+                bPivot.rotation.z = -0.095;
+
+                const outerCone = new THREE.Mesh(outerConeGeo, outerBeamMat);
+                const coreCone = new THREE.Mesh(coreConeGeo, coreBeamMat);
+                const lensFlare = new THREE.Mesh(flareGeo, coreBeamMat);
+                bPivot.add(outerCone, coreCone, lensFlare);
+                headlightBeams.add(bPivot);
+                beamPivots.push(bPivot);
+
+                const gPool = new THREE.Mesh(poolGeo, poolMat);
+                gPool.position.set(hCfg.fx + 1.38, 0.016, side * (hCfg.hz * 1.15));
+                gPool.scale.set(2.65, 1.0, 1.15);
+                headlightBeams.add(gPool);
+
+                const rPool = new THREE.Mesh(poolGeo, rearGlowMat);
+                rPool.position.set(hCfg.rx - 0.26, 0.015, side * 0.30);
+                rPool.scale.set(0.85, 1.0, 0.72);
+                headlightBeams.add(rPool);
+            }
+
+            if (hCfg.fogY) {
+                const fogConeGeo = new THREE.CylinderGeometry(0.035, 0.24, 1.25, 16, 1, true);
+                fogConeGeo.rotateZ(Math.PI / 2);
+                fogConeGeo.translate(1.25 / 2, 0, 0);
+                const fogMat = new THREE.MeshBasicMaterial({
+                    color: 0xfacc15,
+                    transparent: true,
+                    opacity: 0.22,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending
+                });
+                for (let side of [-1, 1]) {
+                    const fMesh = new THREE.Mesh(fogConeGeo, fogMat);
+                    fMesh.position.set(hCfg.fx, hCfg.fogY, side * hCfg.fogZ);
+                    fMesh.rotation.z = -0.13;
+                    headlightBeams.add(fMesh);
+                }
+            }
+            if (hCfg.roofY) {
+                const roofConeGeo = new THREE.CylinderGeometry(0.028, 0.22, 1.75, 16, 1, true);
+                roofConeGeo.rotateZ(Math.PI / 2);
+                roofConeGeo.translate(1.75 / 2, 0, 0);
+                for (let rz of [-0.27, -0.09, 0.09, 0.27]) {
+                    const rMesh = new THREE.Mesh(roofConeGeo, outerBeamMat);
+                    rMesh.position.set(hCfg.fx - 0.04, hCfg.roofY, rz);
+                    rMesh.rotation.z = -0.18;
+                    headlightBeams.add(rMesh);
+                }
+            }
+
+            headlightBeams.userData = { beamPivots, outerBeamMat, coreBeamMat, poolMat };
+            headlightBeams.visible = nightMode;
+            truckGroup.add(headlightBeams);
+            truckGroup.userData.headlightBeams = headlightBeams;
+
+            return { truckGroup, wheelMeshes, steerGroups };
+        }
+
+        function initShowroom() {
+            const canvas = document.getElementById('webgl');
+            const vp = document.getElementById('viewport');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b1120);
+            scene.fog = new THREE.FogExp2(0x0b1120, 0.045);
+
+            camera = new THREE.PerspectiveCamera(36, vp.clientWidth / vp.clientHeight, 0.05, 120);
+            camera.position.set(2.9, 1.55, 3.1);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(vp.clientWidth, vp.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.07;
+            controls.target.set(0.1, 0.55, 0);
+            controls.minDistance = 0.55;
+            controls.maxDistance = 11.0;
+            controls.maxPolarAngle = Math.PI / 2.02;
+
+            hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x1e293b, 0.95);
+            scene.add(hemiLight);
+
+            dirLight = new THREE.DirectionalLight(0xfffbeb, 1.45);
+            dirLight.position.set(6, 10, 7);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+
+            spotLight = new THREE.DirectionalLight(0x93c5fd, 0.55);
+            spotLight.position.set(-6, 4, -5);
+            scene.add(spotLight);
+
+            // Pista Asfáltica do Showroom com Faixas Rodoviárias Animadas
+            pedestalGroup = new THREE.Group();
+            const asphaltPad = new THREE.Mesh(
+                new THREE.CylinderGeometry(3.6, 3.8, 0.18, 64),
+                new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.78 })
+            );
+            asphaltPad.position.y = -0.09;
+            asphaltPad.receiveShadow = true;
+            pedestalGroup.add(asphaltPad);
+
+            const neonRing = new THREE.Mesh(
+                new THREE.TorusGeometry(3.62, 0.022, 12, 64),
+                new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+            );
+            neonRing.rotation.x = Math.PI / 2;
+            neonRing.position.y = 0.005;
+            pedestalGroup.add(neonRing);
+
+            for (let side of [-1, 1]) {
+                const shoulder = new THREE.Mesh(
+                    new THREE.BoxGeometry(5.8, 0.012, 0.055),
+                    materials.wallWhite
+                );
+                shoulder.position.set(0, 0.006, side * 0.88);
+                pedestalGroup.add(shoulder);
+            }
+
+            for (let i = 0; i < 9; i++) {
+                const stripe = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.42, 0.015, 0.09),
+                    materials.roadStripeYellow
+                );
+                stripe.position.set(-2.8 + i * 0.70, 0.008, 0);
+                pedestalGroup.add(stripe);
+                roadStripes.push(stripe);
+            }
+            scene.add(pedestalGroup);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = vp.clientWidth / vp.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(vp.clientWidth, vp.clientHeight);
+            });
+
+            rebuildTruck();
+            animate();
+        }
+
+        function rebuildTruck() {
+            if (truckRoot) scene.remove(truckRoot);
+            truckRoot = new THREE.Group();
+
+            const { truckGroup, wheelMeshes, steerGroups } = buildUnique3DTruckMesh(currentSpecId, paintIndex);
+            activeWheels = wheelMeshes;
+            activeSteerPivots = steerGroups;
+
+            if (currentCargo !== 'Vazio') {
+                const cargo = createTruckCargoGroup(currentCargo, currentSpecId);
+                truckGroup.add(cargo);
+            }
+
+            if (currentSpecId === 5) truckGroup.position.x = 0.35;
+            else if (currentSpecId === 4) truckGroup.position.x = 0.15;
+
+            truckRoot.add(truckGroup);
+            scene.add(truckRoot);
+            updateUI();
+        }
+
+        function updateUI() {
+            const info = CATALOG[currentSpecId];
+            document.getElementById('ui-badge').innerText = info.badge;
+            document.getElementById('ui-name').innerText = info.name;
+            document.getElementById('ui-desc').innerText = info.desc;
+            document.getElementById('ui-cap').innerText = info.cap;
+            document.getElementById('ui-speed').innerText = info.speed;
+            document.getElementById('ui-axles').innerText = info.axles;
+            document.getElementById('ui-price').innerText = info.price;
+
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById(`tab-${i}`).className = (i === currentSpecId) ? 'btn active' : 'btn';
+            }
+
+            const cargos = ['Grãos', 'Madeira Bruta', 'Combustível', 'Materiais de Construção', 'Alimentos Processados', 'Vazio'];
+            cargos.forEach(c => {
+                const el = document.getElementById(`cg-${c}`);
+                if (el) el.className = (c === currentCargo) ? 'btn active' : 'btn';
+            });
+
+            document.getElementById('btn-paint').innerText = `🎨 Pintura #${paintIndex + 1}`;
+            document.getElementById('btn-night').innerText = nightMode ? '☀️ Modo Dia' : '🌙 Faróis / Noite';
+            document.getElementById('btn-steer').innerText = steerActive ? '🛞 Esterçar: ON' : '🛞 Esterçar: OFF';
+            document.getElementById('btn-steer').className = steerActive ? 'btn active' : 'btn';
+            document.getElementById('btn-turntable').innerText = turntableActive ? '🔄 Giro Automático: ON' : '🔄 Giro Automático: OFF';
+            document.getElementById('btn-turntable').className = turntableActive ? 'btn active' : 'btn';
+        }
+
+        function selectTruck(id) {
+            currentSpecId = id;
+            rebuildTruck();
+        }
+        function setCargo(cargo) {
+            currentCargo = cargo;
+            rebuildTruck();
+        }
+        function togglePaint() {
+            paintIndex = (paintIndex + 1) % 2;
+            rebuildTruck();
+        }
+        function toggleSteer() {
+            steerActive = !steerActive;
+            updateUI();
+        }
+        function toggleTurntable() {
+            turntableActive = !turntableActive;
+            updateUI();
+        }
+        function toggleNight() {
+            nightMode = !nightMode;
+            scene.background.setHex(nightMode ? 0x04070f : 0x0b1120);
+            hemiLight.intensity = nightMode ? 0.32 : 0.95;
+            dirLight.intensity = nightMode ? 0.40 : 1.45;
+            if (truckRoot && truckRoot.children[0]?.userData?.headlightBeams) {
+                truckRoot.children[0].userData.headlightBeams.visible = nightMode;
+            }
+            updateUI();
+        }
+
+        function setCameraView(preset) {
+            turntableActive = false;
+            if (truckRoot) truckRoot.rotation.y = 0;
+            updateUI();
+
+            if (preset === 'overview') {
+                camera.position.set(2.8, 1.45, 3.0);
+                controls.target.set(0.1, 0.55, 0);
+            } else if (preset === 'frontWheel') {
+                const fx = currentSpecId === 5 ? 1.75 : (currentSpecId === 1 ? 0.82 : 1.04);
+                camera.position.set(fx + 0.35, 0.34, 1.18);
+                controls.target.set(fx, 0.25, 0.42);
+            } else if (preset === 'rearDual') {
+                camera.position.set(-0.55, 0.36, 1.25);
+                controls.target.set(-0.82, 0.25, 0.44);
+            } else if (preset === 'cabin') {
+                camera.position.set(2.15, 1.15, 1.45);
+                controls.target.set(0.85, 0.82, 0);
+            }
+            controls.update();
+        }
+
+        function exportCurrentTruckGLB() {
+            if (!truckRoot || typeof THREE.GLTFExporter === 'undefined') return;
+            const exporter = new THREE.GLTFExporter();
+            const slugMap = { 1: 'ford_f4000', 2: 'scania_113h', 3: 'mb_1620', 4: 'volvo_fh540', 5: 'peterbilt_389' };
+            const fileName = `truck_${currentSpecId}_${slugMap[currentSpecId] || 'model'}.glb`;
+            exporter.parse(
+                truckRoot.children[0] || truckRoot,
+                (result) => {
+                    const blob = new Blob([result], { type: 'application/octet-stream' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+                { binary: true }
+            );
+        }
+
+        let lastTime = performance.now();
+        function animate() {
+            requestAnimationFrame(animate);
+            const now = performance.now();
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
+
+            const speedVal = parseFloat(document.getElementById('wheel-speed').value) || 0;
+            const angularVel = (speedVal / 45) * 3.2;
+
+            activeWheels.forEach(w => {
+                w.rotation.z -= angularVel * delta;
+            });
+
+            const steerAngle = steerActive ? Math.sin(now * 0.0024) * 0.34 : 0;
+            activeSteerPivots.forEach(sp => {
+                sp.rotation.y = steerAngle;
+            });
+
+            if (nightMode && truckRoot && truckRoot.children[0]?.userData?.headlightBeams) {
+                const hb = truckRoot.children[0].userData.headlightBeams;
+                if (hb.userData && hb.userData.outerBeamMat) {
+                    const tSec = now * 0.001;
+                    const pulse = 1.0 + Math.sin(tSec * 6.5) * 0.07 + Math.sin(tSec * 2.1) * 0.06;
+                    hb.userData.outerBeamMat.opacity = 0.22 * pulse;
+                    hb.userData.coreBeamMat.opacity = 0.36 * pulse;
+                    hb.userData.poolMat.opacity = 0.28 * pulse;
+                    hb.userData.beamPivots.forEach(bp => { bp.rotation.y = steerAngle * 0.55; });
+                }
+            }
+
+            // Sincroniza o movimento das faixas da pista com a rotação linear dos pneus (v = w * R)
+            const linearSpeed = angularVel * 0.24;
+            roadStripes.forEach(s => {
+                s.position.x -= linearSpeed * delta;
+                if (s.position.x < -3.15) s.position.x += 6.30;
+            });
+
+            if (turntableActive && truckRoot) {
+                truckRoot.rotation.y += 0.35 * delta;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = initShowroom;
+    </script>
+</body>
+</html>
+

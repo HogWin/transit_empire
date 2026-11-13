@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://btransitmainview"]
+
+[ext_resource type="Script" path="res://Scripts/MainView.cs" id="1_mainview"]
+
+[node name="MainView" type="Node3D"]
+script = ExtResource("1_mainview")
+
