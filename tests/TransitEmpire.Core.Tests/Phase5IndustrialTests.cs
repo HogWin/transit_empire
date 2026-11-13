@@ -127,7 +127,7 @@ public class Phase5IndustrialTests
         Assert.True(engine.TryStartResearch(ResearchTechId.RoadTrain9Axles, out _));
         engine.Research.Advance(65f);
 
-        var rodotrem = ProgressionManager.AvailableTruckModels.Last();
+        var rodotrem = ProgressionManager.AvailableTruckModels.First(t => t.RequiresHighwayOrDualCarriage && !t.IsPassengerBus);
         Assert.Equal(220, rodotrem.Capacity);
         Assert.True(rodotrem.RequiresHighwayOrDualCarriage);
         Assert.True(engine.Research.IsTruckUnlocked(rodotrem, playerLevel: 1));

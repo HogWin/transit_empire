@@ -1,6 +1,15 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace TransitEmpire.Core.Domain;
+
+public enum UrbanDistrictType
+{
+    Center = 0,
+    Residential = 1,
+    Commercial = 2
+}
 
 /// <summary>
 /// Armazém urbano de uma cidade, responsável por receber recursos e suprir as demandas diárias.
@@ -111,8 +120,12 @@ public class City
     public int CenterX { get; }
     public int CenterY { get; }
     public HashSet<(int X, int Y)> UrbanTiles { get; } = new();
+    public Dictionary<(int X, int Y), UrbanDistrictType> UrbanDistricts { get; } = new();
     public CityWarehouse Warehouse { get; } = new();
-    
+
+    public int ResidentialTileCount => UrbanDistricts.Values.Count(d => d == UrbanDistrictType.Residential);
+    public int CommercialTileCount => UrbanDistricts.Values.Count(d => d == UrbanDistrictType.Commercial);
+
     public int Population { get; set; } = 250;
     public int ConsecutiveCyclesWellSupplied { get; set; } = 0;
     public int ExpansionLevel { get; set; } = 1;
@@ -126,15 +139,50 @@ public class City
         Name = name;
         CenterX = centerX;
         CenterY = centerY;
-        
-        // Núcleo inicial da cidade (área 3x3)
+
+        // Núcleo inicial da cidade (área 3x3: 1 centro, 2 comerciais iniciais, 6 residenciais)
         for (int dx = -1; dx <= 1; dx++)
         {
             for (int dy = -1; dy <= 1; dy++)
             {
-                UrbanTiles.Add((centerX + dx, centerY + dy));
+                var pt = (centerX + dx, centerY + dy);
+                UrbanTiles.Add(pt);
+                UrbanDistrictType dist = (dx == 0 && dy == 0)
+                    ? UrbanDistrictType.Center
+                    : ((dx == 1 && dy == 0) || (dx == 0 && dy == 1)
+                        ? UrbanDistrictType.Commercial
+                        : UrbanDistrictType.Residential);
+                UrbanDistricts[pt] = dist;
             }
         }
+    }
+
+    public UrbanDistrictType GetDistrictType(int x, int y)
+    {
+        if (UrbanDistricts.TryGetValue((x, y), out var dist))
+            return dist;
+        return (x == CenterX && y == CenterY) ? UrbanDistrictType.Center : UrbanDistrictType.Residential;
+    }
+
+    public void SetUrbanTileDistrict(int x, int y, UrbanDistrictType district)
+    {
+        UrbanTiles.Add((x, y));
+        UrbanDistricts[(x, y)] = district;
+    }
+
+    /// <summary>
+    /// Multiplicador de velocidade aplicável a vias que atravessam o miolo central de cidades prósperas.
+    /// Cidades pequenas (&lt; Exp.2 e &lt;= 9 blocos) não geram gargalo severo; metrópoles chegam a -62% no centro.
+    /// </summary>
+    public float GetDowntownTrafficSpeedMultiplier()
+    {
+        if (ExpansionLevel < 2 && UrbanTiles.Count <= 9)
+            return 1.0f;
+
+        int growthSteps = Math.Max(0, ExpansionLevel - 2);
+        int extraCommercial = Math.Max(0, CommercialTileCount - 2);
+        float penalty = 0.22f + growthSteps * 0.07f + extraCommercial * 0.03f;
+        return Math.Clamp(1.0f - penalty, 0.38f, 0.78f);
     }
 }
 

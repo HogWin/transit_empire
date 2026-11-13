@@ -119,9 +119,11 @@ public class SprintE6CoreTests
         landmark.ContributeCargo(ResourceType.Lumber, 30, out _, out _);
         landmark.ContributeCargo(ResourceType.Steel, 45, out _, out _);
         landmark.ContributeCargo(ResourceType.Goods, 35, out _, out _);
+        landmark.ContributeCargo(ResourceType.Machinery, 20, out _, out _);
         landmark.ContributeCargo(ResourceType.Steel, 45, out _, out _);
         landmark.ContributeCargo(ResourceType.Lumber, 40, out _, out _);
         landmark.ContributeCargo(ResourceType.Goods, 45, out _, out _);
+        landmark.ContributeCargo(ResourceType.Machinery, 30, out _, out _);
         world.Landmarks.Add(landmark);
 
         var engine = new SimulationEngine(world);

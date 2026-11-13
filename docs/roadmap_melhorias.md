@@ -124,13 +124,13 @@
 
 ---
 
-### ⏳ Sprint F3 — Cadeia Produtiva Tier 3, Combustível Real & Passageiros (`Economia`) — *Planejado*
+### ✅ Sprint F3 — Cadeia Produtiva Tier 3, Combustível Real & Passageiros (`Economia`) — *Concluído*
 *Aprofunda o papel estratégico das refinarias, indústrias pesadas e mobilidade urbana entre cidades.*
-- [ ] **1. Transporte de Passageiros Intermunicipal (`Intercity Bus Lines`):**
+- [x] **1. Transporte de Passageiros Intermunicipal (`Intercity Bus Lines`):**
   - Terminais rodoviários urbanos e linhas de ônibus próprias entre cidades, gerando receita previsível por passagem e acelerando o crescimento populacional das cidades atendidas.
-- [ ] **2. Cadeia Industrial Tier 3 (`Carvão & Materiais de Construção / Maquinário`):**
+- [x] **2. Cadeia Industrial Tier 3 (`Carvão & Materiais de Construção / Maquinário`):**
   - Introduzir etapas avançadas combinando `IronOre` + `Coal` para `Steel` e `Steel` + `Lumber` + `Fuel` para suprir demandas de cidades grandes e Mega-Obras.
-- [ ] **3. Logística Real de Combustível (`Fuel Supply`):**
+- [x] **3. Logística Real de Combustível (`Fuel Supply`):**
   - Abastecer Garagens e `LogisticsHub` com `Fuel` reduz o custo operacional por km na região e evita sobretaxa de diesel escasso nas viagens longas.
 
 ---
@@ -161,6 +161,6 @@
 | :--- | :--- | :--- | :--- |
 | **Sprint F1** | **Escalabilidade, Settings & Tutorial** (`MultiMesh`, `80x80/100x100`, `settings.json`) | Base técnica e performance para suportar mapas maiores e retenção inicial | ✅ Concluído |
 | **Sprint F2** | **Automação de Frota** (`Clone`, `Wait Full Load`, `Headway`, `Auto-Replace`) | Elimina microgestão antes de ampliar cadeias de carga e número de linhas | ✅ Concluído |
-| **Sprint F3** | **Economia & Passageiros** (`Ônibus`, `Tier 3`, `Combustível em Hubs`) | Enriquece fluxos econômicos aproveitando a automação da F2 | ⏳ Planejado |
+| **Sprint F3** | **Economia & Passageiros** (`Ônibus`, `Tier 3`, `Combustível em Hubs`) | Enriquece fluxos econômicos aproveitando a automação da F2 | ✅ Concluído |
 | **Sprint F4** | **Cidades Vivas & Guerra Rival** (`Anéis Viários`, `Leilões & Pedágio Rival`) | Cria desafios dinâmicos de malha e competição sobre a economia completa | ⏳ Planejado |
 | **Sprint F5** | **Ferrovias & Intermodal** (`Trilhos`, `Block Signals`, `Hub Rodoferroviário`) | Expansão *endgame* conectando coleta rodoviária, trens pesados e portos | ⏳ Planejado |

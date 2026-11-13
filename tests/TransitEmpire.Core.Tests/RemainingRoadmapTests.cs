@@ -255,7 +255,7 @@ public class RemainingRoadmapTests
     public void IconicTruckCatalog_MatchesShowcaseAndResolvesLegacySaveNames()
     {
         var models = ProgressionManager.AvailableTruckModels;
-        Assert.Equal(6, models.Count);
+        Assert.Equal(8, models.Count);
         Assert.Equal("Utilitário F-4000 Carga Seca", models[0].Name);
         Assert.Equal("Scania 113H TopLine 360", models[1].Name);
         Assert.Equal(28, models[1].Capacity);
@@ -265,6 +265,8 @@ public class RemainingRoadmapTests
         Assert.Equal("Peterbilt 389 Bi-Trem King", models[4].Name);
         Assert.Equal("Scania R730 V8 Rodotrem 9 Eixos", models[5].Name);
         Assert.True(models[5].RequiresHighwayOrDualCarriage);
+        Assert.True(models[6].IsPassengerBus);
+        Assert.True(models[7].IsPassengerBus);
 
         Assert.Equal(models[1], ProgressionManager.ResolveSpecByName("Caminhão Leve 3/4"));
         Assert.Equal(models[4], ProgressionManager.ResolveSpecByName("Carreta Bi-Trem Estradeira"));

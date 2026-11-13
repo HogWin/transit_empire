@@ -37,6 +37,9 @@ public class RoadEdge
     public bool IsBlocked { get; set; } = false;
     public bool IsAlpineBiome { get; set; } = false;
     public bool IsHillOrMountain { get; set; } = false;
+    public float UrbanTrafficSpeedMultiplier { get; set; } = 1.0f; // Penalidade de trânsito pesado no centro urbano
+    public int OwnerRivalId { get; set; } = 0; // > 0 para trecho privado construído por rival
+    public long RivalTollFee { get; set; } = 0;
     public long RecentRevenue30d { get; set; } = 0;
 
     public float CurrentSpeedLimitKmh => Tier.GetSpeedLimitKmh();
@@ -88,6 +91,11 @@ public class RoadEdge
         if (winterBlizzard && IsAlpineBiome)
         {
             speed *= Tier < RoadTier.Asphalt ? 0.45f : 0.85f;
+        }
+
+        if (UrbanTrafficSpeedMultiplier < 0.999f)
+        {
+            speed *= System.Math.Clamp(UrbanTrafficSpeedMultiplier, 0.30f, 1.0f);
         }
 
         // Capacidade de fluxo varia conforme o nível da via (Pista Dupla e Rodovia suportam muito mais caminhões sem lentidão)

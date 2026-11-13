@@ -584,4 +584,204 @@ public class Sprint4WorldTests
         Assert.Equal(7.5f, loadedTruck.CurrentStopWaitHours, precision: 2);
         Assert.True(loadedTruck.IsHeldForHeadway);
     }
+
+    [Fact]
+    public void BusTerminal_PassengerLines_EarnTicketRevenueAndAccelerateCityGrowth()
+    {
+        var world = CreateSimpleGridWorld(width: 24, height: 12);
+        var cityA = new City(1, "Porto Alegre", 3, 5);
+        var cityB = new City(2, "Caxias do Sul", 18, 5);
+        world.Cities.Add(cityA);
+        world.Cities.Add(cityB);
+
+        var nA = new RoadNode(1, 5, 5);
+        var nB = new RoadNode(2, 16, 5);
+        var nG = new RoadNode(3, 5, 6);
+        world.RoadNodes.AddRange(new[] { nA, nB, nG });
+        LinkNodes(world, 1, nA, nB, RoadTier.Asphalt, 12f);
+        LinkNodes(world, 2, nB, nA, RoadTier.Asphalt, 12f);
+        LinkNodes(world, 3, nG, nA, RoadTier.Asphalt, 1f);
+        LinkNodes(world, 4, nA, nG, RoadTier.Asphalt, 1f);
+
+        var engine = new SimulationEngine(world);
+        engine.Player.Balance = 150_000;
+
+        var garage = engine.BuildGarage(5, 7, "Garagem Rodoviária")!;
+        var termA = engine.BuildBusTerminal(5, 4, out _, "Rodoviária Porto Alegre")!;
+        var termB = engine.BuildBusTerminal(16, 4, out _, "Rodoviária Caxias")!;
+        Assert.NotNull(garage);
+        Assert.NotNull(termA);
+        Assert.NotNull(termB);
+
+        termA.WaitingPassengers = 40;
+        var busSpec = ProgressionManager.AvailableTruckModels.First(s => s.IsPassengerBus);
+        var bus = engine.BuyTruck(garage, busSpec)!;
+        Assert.NotNull(bus);
+        Assert.True(bus.Spec.IsPassengerBus);
+
+        bus.SetSchedule(new[]
+        {
+            new ScheduleStop(ScheduleStopKind.BusTerminal, termA.Id, ScheduleAction.Load),
+            new ScheduleStop(ScheduleStopKind.BusTerminal, termB.Id, ScheduleAction.Unload)
+        });
+
+        int initialPopB = cityB.Population;
+        for (int i = 0; i < 60; i++)
+        {
+            engine.Tick(0.25f);
+            if (engine.Financials.Lifetime.TicketRevenue > 0)
+                break;
+        }
+
+        Assert.True(engine.Financials.Lifetime.TicketRevenue > 0);
+        Assert.True(termA.WaitingPassengers < 40);
+        Assert.True(termB.TotalPassengersServed > 0);
+        Assert.True(termB.TotalTicketRevenue > 0);
+        Assert.True(cityB.ActiveBusServiceHours > 0);
+        Assert.True(cityB.Population > initialPopB);
+
+        // Crescimento urbano acelerado quando cidade possui serviço rodoviário ativo (2 ciclos em vez de 3 e +10 pop)
+        cityB.Warehouse.DailyDemand.Clear();
+        cityB.Warehouse.DailyDemand[ResourceType.Grain] = 1;
+        cityB.Warehouse.StoredStock[ResourceType.Grain] = 10;
+        cityB.ConsecutiveCyclesWellSupplied = 1;
+        int popBeforeDaily = cityB.Population;
+        int expBefore = cityB.ExpansionLevel;
+
+        for (int h = 0; h < 24; h++)
+            engine.Tick(1.0f);
+
+        Assert.True(cityB.ExpansionLevel > expBefore);
+        Assert.True(cityB.Population >= popBeforeDaily + 10);
+    }
+
+    [Fact]
+    public void Tier3Chain_CoalCokesSteelAndMachineryCombinesSteelLumberFuel_UnlockedInLargeCityAndLandmark()
+    {
+        var steelMill = new Industry(
+            id: 1,
+            name: "Siderúrgica Teste",
+            gridX: 2,
+            gridY: 2,
+            output: ResourceType.Steel,
+            input: ResourceType.IronOre,
+            productionRate: 10,
+            secondaryInput: ResourceType.Coal);
+
+        steelMill.ReceiveInputCargo(ResourceType.IronOre, 40);
+        steelMill.Produce();
+        int baseSteelProduced = steelMill.OutputStock - 20;
+
+        steelMill.ReceiveInputCargo(ResourceType.Coal, 10);
+        steelMill.Produce();
+        int boostedSteelProduced = steelMill.OutputStock - (20 + baseSteelProduced);
+        Assert.True(boostedSteelProduced > baseSteelProduced);
+
+        var machineryFactory = new Industry(
+            id: 2,
+            name: "Fábrica de Maquinário",
+            gridX: 5,
+            gridY: 2,
+            output: ResourceType.Machinery,
+            input: ResourceType.Steel,
+            productionRate: 8,
+            secondaryInput: ResourceType.Lumber,
+            tertiaryInput: ResourceType.Fuel);
+
+        machineryFactory.OutputStock = 0;
+        machineryFactory.ReceiveInputCargo(ResourceType.Steel, 20);
+        machineryFactory.ReceiveInputCargo(ResourceType.Lumber, 20);
+        machineryFactory.ReceiveInputCargo(ResourceType.Fuel, 20);
+        machineryFactory.Produce();
+        Assert.True(machineryFactory.OutputStock > 8);
+        Assert.True(machineryFactory.TertiaryInputStock < 20);
+
+        // Cidade expandida para nível 5 (já atendida em Goods e Fuel) passa a demandar Machinery
+        var city = new City(1, "Metrópole", 6, 6);
+        city.Population = 480;
+        city.Warehouse.DailyDemand[ResourceType.Goods] = 4;
+        city.Warehouse.DailyDemand[ResourceType.Fuel] = 4;
+        var (addedRes, qty, unlockedNew) = city.Warehouse.ExpandDemandForGrowth(expansionLevel: 5, population: city.Population);
+        Assert.Equal(ResourceType.Machinery, addedRes);
+        Assert.True(unlockedNew);
+        Assert.True(qty >= 3);
+        Assert.True(city.Warehouse.DailyDemand.ContainsKey(ResourceType.Machinery));
+
+        // Mega-obra aceita Machinery e Stage 2 exige Machinery
+        Assert.True(RegionalLandmark.AcceptsResource(ResourceType.Machinery));
+        var landmark = new RegionalLandmark(1, "Usina Teste", LandmarkKind.HydroelectricDam, 8, 8);
+        landmark.ContributeCargo(ResourceType.Steel, 30, out _, out _);
+        landmark.ContributeCargo(ResourceType.Lumber, 30, out _, out _);
+        Assert.Equal(2, landmark.CurrentStage);
+        Assert.True(landmark.StageRequired.ContainsKey(ResourceType.Machinery));
+    }
+
+    [Fact]
+    public void RealFuelSupply_HubReserveGrantsDiscount_AndUnfueledLongHaulPaysScarcitySurcharge_WithSaveRoundtrip()
+    {
+        static long MeasureMaintenanceOnLongRoute(bool supplyHubFuel)
+        {
+            var world = CreateSimpleGridWorld(width: 40, height: 12);
+            var n1 = new RoadNode(1, 2, 5);
+            var n2 = new RoadNode(2, 30, 5);
+            world.RoadNodes.AddRange(new[] { n1, n2 });
+            var edge = LinkNodes(world, 1, n1, n2, RoadTier.Asphalt, distKm: 50f);
+            LinkNodes(world, 2, n2, n1, RoadTier.Asphalt, distKm: 50f);
+
+            var engine = new SimulationEngine(world);
+            engine.Player.Balance = 100_000;
+
+            var hub = engine.BuildLogisticsHub(2, 4, "Hub Combustível")!;
+            if (supplyHubFuel)
+                hub.ReceiveFuel(100);
+
+            var spec = new TruckSpecification("Bitrem Diesel", 120, 80f, 30_000, 10, 1);
+            var truck = new Truck(1, "Frota Diesel", spec);
+            truck.AssignPath(new[] { edge });
+            truck.Status = TruckStatus.TravelingToDelivery;
+            engine.ActiveTrucks.Add(truck);
+
+            engine.Tick(1.0f);
+            return engine.Financials.Lifetime.FleetMaintenanceExpense;
+        }
+
+        long costWithRegionalFuel = MeasureMaintenanceOnLongRoute(supplyHubFuel: true);
+        long costWithoutFuelLongHaul = MeasureMaintenanceOnLongRoute(supplyHubFuel: false);
+
+        Assert.True(costWithRegionalFuel > 0);
+        Assert.True(costWithoutFuelLongHaul > costWithRegionalFuel * 1.5);
+
+        // Save/Load preserva Hub.FuelStock, BusTerminal, City.ActiveBusServiceHours, Industry.TertiaryInput e TicketRevenue
+        var saveWorld = CreateSimpleGridWorld(width: 18, height: 12);
+        var c = new City(1, "Joinville", 4, 4) { ActiveBusServiceHours = 48 };
+        saveWorld.Cities.Add(c);
+        var ind = new Industry(1, "Fábrica Maq", 10, 8, ResourceType.Machinery, ResourceType.Steel, 8, ResourceType.Lumber, ResourceType.Fuel);
+        ind.ReceiveInputCargo(ResourceType.Fuel, 25);
+        saveWorld.Industries.Add(ind);
+        var rn = new RoadNode(1, 6, 4);
+        saveWorld.RoadNodes.Add(rn);
+
+        var saveEngine = new SimulationEngine(saveWorld);
+        saveEngine.Player.Balance = 150_000;
+        var hubSave = saveEngine.BuildLogisticsHub(6, 5, "Hub Sul")!;
+        hubSave.ReceiveFuel(180);
+        var btSave = saveEngine.BuildBusTerminal(6, 3, out _, "Rodoviária Joinville")!;
+        btSave.RecordArrival(22, 950);
+        saveEngine.Financials.RecordTicketRevenue(950);
+
+        string json = SaveGameSerializer.SerializeToJson(saveEngine, seed: 303);
+        var (loaded, _) = SaveGameSerializer.DeserializeFromJson(json);
+
+        Assert.Equal(950, loaded.Financials.Lifetime.TicketRevenue);
+        Assert.Equal(48, Assert.Single(loaded.World.Cities).ActiveBusServiceHours);
+        var loadedInd = Assert.Single(loaded.World.Industries);
+        Assert.Equal(ResourceType.Fuel, loadedInd.TertiaryInputResource);
+        Assert.Equal(25, loadedInd.TertiaryInputStock);
+        var loadedHub = Assert.Single(loaded.LogisticsHubs);
+        Assert.Equal(180, loadedHub.FuelStock);
+        var loadedBt = Assert.Single(loaded.BusTerminals);
+        Assert.Equal("Rodoviária Joinville", loadedBt.Name);
+        Assert.Equal(22, loadedBt.TotalPassengersServed);
+        Assert.Equal(950, loadedBt.TotalTicketRevenue);
+    }
 }

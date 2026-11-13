@@ -11,6 +11,9 @@ public class RivalCompany
     public int DeliveredVolume { get; set; }
     public int CompletedContracts { get; set; }
     public long EstimatedRevenue { get; set; }
+    public int OwnedRoadCount { get; set; }
+    public long TollRevenueCollected { get; set; }
+    public int AuctionsWon { get; set; }
 
     public RivalCompany(int id, string name, string colorHex)
     {

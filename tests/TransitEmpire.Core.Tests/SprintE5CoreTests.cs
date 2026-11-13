@@ -174,15 +174,17 @@ public class SprintE5CoreTests
         DeliverDirectViaSchedule(dam, ResourceType.Lumber, 30);
         Assert.Equal(2, dam.CurrentStage);
 
-        // Etapa 2: 45 Steel + 35 Goods
+        // Etapa 2: 45 Steel + 35 Goods + 20 Machinery
         DeliverDirectViaSchedule(dam, ResourceType.Steel, 45);
         DeliverDirectViaSchedule(dam, ResourceType.Goods, 35);
+        DeliverDirectViaSchedule(dam, ResourceType.Machinery, 20);
         Assert.Equal(3, dam.CurrentStage);
 
-        // Etapa 3: 45 Steel + 40 Lumber + 45 Goods
+        // Etapa 3: 45 Steel + 40 Lumber + 45 Goods + 30 Machinery
         DeliverDirectViaSchedule(dam, ResourceType.Steel, 45);
         DeliverDirectViaSchedule(dam, ResourceType.Lumber, 40);
         DeliverDirectViaSchedule(dam, ResourceType.Goods, 45);
+        DeliverDirectViaSchedule(dam, ResourceType.Machinery, 30);
 
         Assert.True(dam.IsCompleted);
         Assert.True(projectDone);
@@ -198,9 +200,11 @@ public class SprintE5CoreTests
             lm.ContributeCargo(ResourceType.Lumber, 30, out _, out _);
             lm.ContributeCargo(ResourceType.Steel, 45, out _, out _);
             lm.ContributeCargo(ResourceType.Goods, 35, out _, out _);
+            lm.ContributeCargo(ResourceType.Machinery, 20, out _, out _);
             lm.ContributeCargo(ResourceType.Steel, 45, out _, out _);
             lm.ContributeCargo(ResourceType.Lumber, 40, out _, out _);
             lm.ContributeCargo(ResourceType.Goods, 45, out _, out _);
+            lm.ContributeCargo(ResourceType.Machinery, 30, out _, out _);
         }
 
         CompleteAllStages(stadium);

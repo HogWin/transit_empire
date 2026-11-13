@@ -1279,7 +1279,7 @@ public class SimulationEngine
                 // ou sobretaxa de diesel escasso em viagens longas > 35km sem reserva próxima)
                 if (deltaKm > 0f && Player.Balance > 1000)
                 {
-                    bool hasRegionalFuel = ConsumeFleetFuel(truck, deltaKm);
+                    bool hasRegionalFuel = ConsumeFleetFuel(truck, prevEdge, deltaKm);
                     float regionFactor = hasRegionalFuel
                         ? 0.65f
                         : (truck.CurrentTripDistanceKm > 70f ? 1.50f : (truck.CurrentTripDistanceKm > 35f ? 1.35f : 1.0f));
@@ -1314,7 +1314,7 @@ public class SimulationEngine
             || LogisticsHubs.Any(h => h.FuelStock > 0 && Math.Abs(h.GridX - gridX) + Math.Abs(h.GridY - gridY) <= RegionalFuelRadiusTiles);
     }
 
-    private bool ConsumeFleetFuel(Truck truck, float deltaKm)
+    private bool ConsumeFleetFuel(Truck truck, RoadEdge? traversedEdge, float deltaKm)
     {
         foreach (var garage in Garages)
         {
@@ -1322,18 +1322,23 @@ public class SimulationEngine
                 return garage.TryConsumeFuelForTravel(deltaKm);
         }
 
-        RoadNode? refNode = truck.CurrentEdge?.ToNode ?? truck.LastNode ?? Garages.FirstOrDefault()?.AccessNode;
-        if (refNode != null)
+        RoadEdge? activeEdge = truck.CurrentEdge ?? traversedEdge;
+        RoadNode? refNodeA = activeEdge?.FromNode;
+        RoadNode? refNodeB = activeEdge?.ToNode ?? truck.LastNode ?? Garages.FirstOrDefault()?.AccessNode;
+        if (refNodeA != null || refNodeB != null)
         {
+            static bool InFuelRadius(int gx, int gy, RoadNode? n) =>
+                n != null && Math.Abs(gx - n.GridX) + Math.Abs(gy - n.GridY) <= RegionalFuelRadiusTiles;
+
             foreach (var garage in Garages)
             {
-                if (garage.FuelStock > 0 && Math.Abs(garage.GridX - refNode.GridX) + Math.Abs(garage.GridY - refNode.GridY) <= RegionalFuelRadiusTiles)
+                if (garage.FuelStock > 0 && (InFuelRadius(garage.GridX, garage.GridY, refNodeA) || InFuelRadius(garage.GridX, garage.GridY, refNodeB)))
                     return garage.TryConsumeFuelForTravel(deltaKm);
             }
 
             foreach (var hub in LogisticsHubs)
             {
-                if (hub.FuelStock > 0 && Math.Abs(hub.GridX - refNode.GridX) + Math.Abs(hub.GridY - refNode.GridY) <= RegionalFuelRadiusTiles)
+                if (hub.FuelStock > 0 && (InFuelRadius(hub.GridX, hub.GridY, refNodeA) || InFuelRadius(hub.GridX, hub.GridY, refNodeB)))
                     return hub.TryConsumeFuelForTravel(deltaKm);
             }
         }
@@ -2062,10 +2067,10 @@ public class SimulationEngine
             return 0;
 
         float distanceFactor = 1f + Math.Clamp(bus.CurrentTripDistanceKm / 40f, 0f, 0.9f);
-        long ticketRevenue = Math.Max(20L, (long)Math.Round(passengers * 16f * distanceFactor * LandmarkFreightMultiplier));
+        long ticketRevenue = Math.Max(20L, (long)Math.Round(passengers * 16f * distanceFactor * LandmarkFreightBonusMultiplier * Milestones.FreightAndTollBonusMultiplier));
 
         Player.Balance += ticketRevenue;
-        Player.AddXp(passengers * 6);
+        Player.AddXp((int)Math.Round(passengers * 6 * LandmarkXpMultiplier * Milestones.XpBonusMultiplier));
         Financials.RecordTicketRevenue(ticketRevenue);
         terminal.RecordArrival(passengers, ticketRevenue);
 

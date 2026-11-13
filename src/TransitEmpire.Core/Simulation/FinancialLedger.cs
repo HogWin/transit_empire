@@ -22,6 +22,7 @@ public class FinancialStatement
     public long FleetMaintenanceExpense { get; set; }
     public long RoadConstructionExpense { get; set; }
     public long RoadMaintenanceExpense { get; set; }
+    public long RivalTollExpense { get; set; }
     public long LoanInterestExpense { get; set; }
 
     // Investimentos (CapEx: Frota, Garagens, Hubs, P&D, Regiões)
@@ -32,7 +33,7 @@ public class FinancialStatement
     public long ClosingDebt { get; set; }
 
     public long TotalRevenue => FreightRevenue + TicketRevenue + ContractBonusRevenue + MunicipalSubsidyRevenue + TollRevenue;
-    public long TotalOperatingExpenses => FleetMaintenanceExpense + RoadConstructionExpense + RoadMaintenanceExpense + LoanInterestExpense;
+    public long TotalOperatingExpenses => FleetMaintenanceExpense + RoadConstructionExpense + RoadMaintenanceExpense + RivalTollExpense + LoanInterestExpense;
     public long OperatingProfit => TotalRevenue - TotalOperatingExpenses;
     public long NetCashFlow => TotalRevenue - TotalOperatingExpenses - InfrastructureAndFleetExpense;
 

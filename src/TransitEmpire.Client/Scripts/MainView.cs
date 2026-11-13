@@ -2958,6 +2958,20 @@ public partial class MainView : Node3D
                 break;
             }
 
+            case ToolMode.BuildBusTerminal:
+            {
+                var terminal = _bridge.TryBuildBusTerminal(gx, gy, out string btMsg);
+                if (terminal != null)
+                {
+                    SpawnConstructionBurst(GridToWorld(gx, gy));
+                    _audio?.PlayStructureBuilt();
+                }
+                else
+                    _audio?.PlayError();
+                LogEvent(btMsg);
+                break;
+            }
+
             case ToolMode.Demolish:
             {
                 if (_bridge.TryDemolishAt(gx, gy, out var demResult, out string demMsg))
@@ -3213,6 +3227,21 @@ public partial class MainView : Node3D
         RefreshIndustryVisualsNear(hub.GridX, hub.GridY);
         RebuildSchedulePools();
         _minimapStaticDirty = true;
+    }
+
+    private void OnBusTerminalBuilt(BusTerminal terminal)
+    {
+        SpawnBusTerminalMesh(terminal);
+        RebuildSchedulePools();
+        _minimapStaticDirty = true;
+        RefreshHud();
+    }
+
+    private void OnPassengersDelivered(Truck bus, BusTerminal terminal, int count, long revenue)
+    {
+        SpawnFloatingRevenuePopup(GridToWorld(terminal.GridX, terminal.GridY), $"+R$ {revenue:N0} ({count} pass.)", new Color("38bdf8"), fontSize: 50, duration: 2.1f);
+        _audio?.PlayCashRegister(revenue);
+        LogEvent($"🚌 {bus.Name} desembarcou {count} passageiros em {terminal.Name} (+R$ {revenue:N0} em passagens).");
     }
 
     private void OnTruckPitStopCompleted(Truck truck, string facilityName, long cost)
@@ -5984,6 +6013,13 @@ public partial class MainView : Node3D
             _scheduleTargetSelect.AddItem(tag);
         }
 
+        foreach (var bt in _bridge.Engine.BusTerminals)
+        {
+            string tag = $"[Rodoviária] {bt.Name} ({bt.WaitingPassengers} pass.)";
+            _scheduleTargetPool.Add((ScheduleStopKind.BusTerminal, bt.Id, tag));
+            _scheduleTargetSelect.AddItem(tag);
+        }
+
         foreach (var seaport in _bridge.World.Seaports)
         {
             string shipTag = seaport.IsShipDocked ? "Atracado +45%" : "Em Alto-Mar";
@@ -6206,9 +6242,11 @@ public partial class MainView : Node3D
             : (t.HasManualSchedule
                 ? $"[color=#0369a1][b]Agenda Multi-Paradas ({t.Schedule.Count})[/b][/color]"
                 : "[color=#15803d][b]Despacho Automático (2-Estágios)[/b][/color]");
+        string cargoUnit = t.Spec.IsPassengerBus ? "pass." : "un.";
+        string cargoLabel = t.Spec.IsPassengerBus ? "Passageiros" : $"{t.LoadedCargoType}";
         string cargoText = t.LoadedCargoAmount > 0
-            ? $"{t.LoadedCargoAmount}/{t.Spec.Capacity} un. {t.LoadedCargoType}"
-            : $"Vazio (0/{t.Spec.Capacity} un.)";
+            ? $"{t.LoadedCargoAmount}/{t.Spec.Capacity} {cargoUnit} {cargoLabel}"
+            : $"Vazio (0/{t.Spec.Capacity} {cargoUnit})";
 
         string nextStopText = t.HasManualSchedule && t.Schedule.Count > 0
             ? _bridge.Engine.GetStopDisplayName(t.GetCurrentStop()!)
@@ -6502,6 +6540,10 @@ public partial class MainView : Node3D
             {
                 lines.Add($"⚡ Catalisador (+50% Prod.): [b]{ind.SecondaryInputResource}[/b] ({ind.SecondaryInputStock}/{ind.MaxStock})");
             }
+            if (ind.TertiaryInputResource != ResourceType.None)
+            {
+                lines.Add($"🛢️ Insumo Especial (+25% Prod.): [b]{ind.TertiaryInputResource}[/b] ({ind.TertiaryInputStock}/{ind.MaxStock})");
+            }
             lines.Add($"📤 Produz: [b]{ind.OutputResource}[/b] (+{ind.ProductionRatePerDay}/dia{(conn.DailyProductionBonus > 0 ? $" [color=#15803d]+{conn.DailyProductionBonus} bônus[/color]" : "")})");
             lines.Add($"🔌 Módulos Conectados: [b]{conn.RoadDockCount} doca(s)[/b] • [b]{conn.FacilityBridgeCount} ponte(s)[/b] • [b]{conn.NearbyHubCount} hub(s)[/b]");
             lines.Add($"📊 Saída: [b]{ind.OutputStock}/{ind.MaxStock} un.[/b]");
@@ -6554,11 +6596,22 @@ public partial class MainView : Node3D
         {
             lines.Add($"\n📦 [b]{hub.Name}[/b]");
             lines.Add("✨ +20% Frete & Pit-Stop Gratuito");
+            string hubFuelTag = hub.FuelStock > 0 ? " [color=#15803d](-35% Custo/km num raio 22q ATIVO)[/color]" : " (Abasteça c/ Fuel)";
+            lines.Add($"⛽ Diesel Regional: [b]{hub.FuelStock}/{hub.MaxFuelCapacity} un.[/b]{hubFuelTag}");
             lines.Add($"🏭 Armazém: {hub.CurrentTotalStored}/{hub.MaxStorageCapacity} un.");
             foreach (var kv in hub.StoredCargo.Where(k => k.Value > 0))
             {
                 lines.Add($"  • {kv.Key}: [b]{kv.Value} un.[/b]");
             }
+        }
+
+        var busTerminal = _bridge.Engine.BusTerminals.FirstOrDefault(b => b.GridX == sx && b.GridY == sy);
+        if (busTerminal != null)
+        {
+            lines.Add($"\n🚌 [b]{busTerminal.Name}[/b] (Terminal Rodoviário)");
+            lines.Add($"👥 Passageiros Aguardando: [b]{busTerminal.WaitingPassengers}/{busTerminal.MaxPassengers}[/b]");
+            lines.Add($"🎫 Atendidos Total: [b]{busTerminal.TotalPassengersServed:N0} pass.[/b]");
+            lines.Add($"💰 Receita de Bilhetes: [b]R$ {busTerminal.TotalTicketRevenue:N0}[/b]");
         }
 
         var seaport = _bridge.World.Seaports.FirstOrDefault(s => s.GridX == sx && s.GridY == sy);
@@ -6615,7 +6668,10 @@ public partial class MainView : Node3D
     {
         if (ind.RequiredInputResource != ResourceType.None)
         {
-            return $"🏭 {ind.Name}\n[In: {ind.RequiredInputResource} {ind.InputStock} → Out: {ind.OutputResource} {ind.OutputStock}]";
+            string extra = ind.TertiaryInputResource != ResourceType.None
+                ? $" +{ind.TertiaryInputResource} {ind.TertiaryInputStock}"
+                : string.Empty;
+            return $"🏭 {ind.Name}\n[In: {ind.RequiredInputResource} {ind.InputStock}{extra} → Out: {ind.OutputResource} {ind.OutputStock}]";
         }
         return $"🏭 {ind.Name}\n[{ind.OutputResource}: {ind.OutputStock} un.]";
     }

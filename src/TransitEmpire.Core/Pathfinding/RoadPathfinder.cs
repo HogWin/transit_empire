@@ -107,12 +107,17 @@ public class RoadPathfinder
                 if (visited.Contains(neighbor.Id))
                     continue;
 
-                // Tempo para atravessar esta aresta considerando tráfego, desgaste e clima
+                // Tempo para atravessar esta aresta considerando tráfego, desgaste, clima e pedágio rival
                 float edgeTravelTime = edge.EstimateTravelTimeHours(weather, winterBlizzard);
                 if (preferHighways && edge.Tier < RoadTier.Highway)
                 {
                     // Penalidade para manter Comboios Rodotrem em Rodovias e Pistas Duplas sempre que possível
                     edgeTravelTime *= 6.0f;
+                }
+                if (edge.OwnerRivalId > 0 && edge.RivalTollFee > 0)
+                {
+                    // Aversão econômica a pedágio rival incentiva desvios competitivos quando equivalentes
+                    edgeTravelTime += edge.RivalTollFee / 360f;
                 }
                 float tentativeG = gScore[current.Id] + edgeTravelTime;
 

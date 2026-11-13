@@ -11,6 +11,7 @@ public struct GridCell
     public BiomeType Biome;
     public RoadTier RoadLevel;
     public int OccupantId; // ID da Cidade, Indústria, Armazém ou Garagem (0 = Vazio)
+    public int RivalOwnerId; // > 0 quando o trecho viário pertence a uma transportadora rival
 
     public bool HasRoad => RoadLevel != RoadTier.None;
     public bool IsBuildable => Terrain == TerrainType.Plains && OccupantId == 0 && !HasRoad;
