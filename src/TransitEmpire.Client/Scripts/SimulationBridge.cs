@@ -17,29 +17,61 @@ public class SimulationBridge
     public GeneratedWorld World => Engine.World;
     public int Seed { get; private set; }
     public WorldScenario Scenario { get; private set; }
+    public bool HasRivers { get; private set; }
+    public MountainDensity Mountains { get; private set; }
     public float TimeScale { get; set; } = 0.0f; // Inicia pausado por padrão
 
     private readonly Dictionary<int, (int GridX, int GridY)> _truckLastGridPos = new();
     private readonly Dictionary<int, (int OriginId, int DestId)> _busAutoRouteTargets = new();
     private int _routeAssignmentCounter = 0;
 
-    public SimulationBridge(int width = 100, int height = 100, int? seed = null, WorldScenario scenario = WorldScenario.Balanced)
+    public static WorldGenerationConfig BuildWorldConfig(
+        int width,
+        int height,
+        int seed,
+        WorldScenario scenario,
+        bool hasRivers = true,
+        MountainDensity mountains = MountainDensity.Normal)
     {
-        Seed = seed ?? Random.Shared.Next(1, 1_000_000);
-        Scenario = scenario;
         int maxDim = Math.Max(width, height);
         int cityCount = maxDim <= 55 ? 4 : (maxDim <= 85 ? 5 : 6);
         int industryCount = maxDim <= 55 ? 7 : (maxDim <= 85 ? 9 : 10);
 
-        var config = new WorldGenerationConfig(
+        return new WorldGenerationConfig(
             Width: width,
             Height: height,
             CityCount: cityCount,
             IndustryCount: industryCount,
-            Seed: Seed,
-            Scenario: scenario);
-        var generator = new WorldGenerator(config);
-        var world = generator.Generate();
+            Seed: seed,
+            Scenario: scenario,
+            HasRivers: hasRivers,
+            Mountains: mountains);
+    }
+
+    public SimulationBridge(
+        int width = 100,
+        int height = 100,
+        int? seed = null,
+        WorldScenario scenario = WorldScenario.Balanced,
+        bool hasRivers = true,
+        MountainDensity mountains = MountainDensity.Normal,
+        GeneratedWorld? prebuiltWorld = null)
+    {
+        Seed = seed ?? Random.Shared.Next(1, 1_000_000);
+        Scenario = scenario;
+        HasRivers = hasRivers;
+        Mountains = mountains;
+
+        GeneratedWorld world;
+        if (prebuiltWorld != null)
+        {
+            world = prebuiltWorld;
+        }
+        else
+        {
+            var config = BuildWorldConfig(width, height, Seed, scenario, hasRivers, mountains);
+            world = new WorldGenerator(config).Generate();
+        }
         Engine = new SimulationEngine(world);
     }
 
@@ -719,5 +751,51 @@ public class SimulationBridge
             AssignNextChainRoute(truck);
         }
         return $"🤖 {truck.Name} voltou para o despacho automático inteligente.";
+    }
+
+    // -------------------------------------------------------------------------
+    // Sprint F5: Ferrovias, Sinaleiros por Bloco e Pátios Intermodais
+    // -------------------------------------------------------------------------
+
+    public bool TryBuildRailTile(int x, int y, out RailStructureType builtStructure)
+    {
+        return Engine.BuildRailTile(x, y, out builtStructure);
+    }
+
+    public bool TryPlaceRailSignal(int x, int y, out string statusMessage)
+    {
+        return Engine.PlaceRailSignal(x, y, out statusMessage);
+    }
+
+    public IntermodalTerminal? TryBuildIntermodalTerminal(int x, int y, out string statusMessage, string? customName = null)
+    {
+        return Engine.BuildIntermodalTerminal(x, y, out statusMessage, customName);
+    }
+
+    public Train? TryBuyAndDispatchTrain(int locomotiveIndex, int wagonCount, int spawnTerminalId, out string statusMessage)
+    {
+        Engine.BuyTrain(locomotiveIndex, wagonCount, spawnTerminalId, out var created, out statusMessage);
+        return created;
+    }
+
+    public bool TryAssignTrainRoute(int trainId, int originTerminalId, int destTerminalId, ResourceType cargoFilter, out string statusMessage)
+    {
+        var stops = new List<IntermodalStop>
+        {
+            new(originTerminalId, ScheduleAction.Load, cargoFilter),
+            new(destTerminalId, ScheduleAction.Unload, ResourceType.None)
+        };
+        return Engine.SetTrainRoute(trainId, stops, out statusMessage);
+    }
+
+    public bool TryAssignMultiStopTrainRoute(int trainId, IReadOnlyList<IntermodalStop> stops, out string statusMessage)
+    {
+        return Engine.SetTrainRoute(trainId, stops, out statusMessage);
+    }
+
+    public Train? TryCloneTrain(int sourceTrainId, out string statusMessage)
+    {
+        Engine.CloneTrain(sourceTrainId, out var cloned, out statusMessage);
+        return cloned;
     }
 }

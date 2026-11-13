@@ -33,6 +33,8 @@ public static class SaveGameSerializer
         var occupantIds = new int[total];
         var rivalOwnerIds = new int[total];
         var oceanMask = new bool[total];
+        var hasRails = new bool[total];
+        var hasRailSignals = new bool[total];
 
         for (int x = 0; x < w; x++)
         {
@@ -46,6 +48,8 @@ public static class SaveGameSerializer
                 occupantIds[idx] = cell.OccupantId;
                 rivalOwnerIds[idx] = cell.RivalOwnerId;
                 oceanMask[idx] = world.OceanMask[x, y];
+                hasRails[idx] = cell.HasRail;
+                hasRailSignals[idx] = cell.HasRailSignal;
             }
         }
 
@@ -95,6 +99,8 @@ public static class SaveGameSerializer
             CellOccupantIds = occupantIds,
             CellRivalOwnerIds = rivalOwnerIds,
             CellOceanMask = oceanMask,
+            CellHasRails = hasRails,
+            CellHasRailSignals = hasRailSignals,
             RoadNodes = world.RoadNodes.Select(n => new RoadNodeDto
             {
                 Id = n.Id,
@@ -336,7 +342,64 @@ public static class SaveGameSerializer
                 MonthlyHistory = engine.Financials.MonthlyHistory
             },
             UnlockedMilestones = engine.Milestones.UnlockedIds.ToList(),
-            RetiredFleetDistanceKm = engine.Milestones.RetiredFleetDistanceKm
+            RetiredFleetDistanceKm = engine.Milestones.RetiredFleetDistanceKm,
+            RailNodes = engine.RailNodes.Select(n => new RailNodeDto
+            {
+                Id = n.Id,
+                GridX = n.GridX,
+                GridY = n.GridY,
+                HasBlockSignal = n.HasBlockSignal
+            }).ToList(),
+            RailEdges = engine.RailEdges.Select(e => new RailEdgeDto
+            {
+                Id = e.Id,
+                FromNodeId = e.FromNode.Id,
+                ToNodeId = e.ToNode.Id,
+                DistanceKm = e.DistanceKm,
+                Structure = e.Structure,
+                BlockGroupId = e.BlockGroupId
+            }).ToList(),
+            IntermodalTerminals = engine.IntermodalTerminals.Select(y => new IntermodalTerminalDto
+            {
+                Id = y.Id,
+                Name = y.Name,
+                GridX = y.GridX,
+                GridY = y.GridY,
+                RailAccessNodeId = y.RailAccessNode?.Id,
+                RoadAccessNodeId = y.RoadAccessNode?.Id,
+                LinkedHubId = y.LinkedHubId,
+                LinkedSeaportId = y.LinkedSeaportId,
+                TotalTransshippedUnits = y.TotalTransshippedUnits,
+                StoredCargo = y.StoredCargo.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value)
+            }).ToList(),
+            Trains = engine.ActiveTrains.Select(tr => new TrainDto
+            {
+                Id = tr.Id,
+                Name = tr.Name,
+                LocomotiveName = tr.Locomotive.Name,
+                WagonCount = tr.WagonCount,
+                Status = tr.Status,
+                LoadedCargoType = tr.LoadedCargoType,
+                LoadedCargoAmount = tr.LoadedCargoAmount,
+                WagonCategory = tr.WagonCategory,
+                LastNodeId = tr.LastNode?.Id,
+                CurrentEdgeId = tr.CurrentEdge?.Id,
+                DistanceAlongCurrentEdgeKm = tr.DistanceAlongCurrentEdgeKm,
+                RemainingEdgeIds = tr.RemainingPath.Select(e => e.Id).ToList(),
+                BlockedBySignalAtNodeId = tr.BlockedBySignalAtNodeId,
+                CurrentStopIndex = tr.CurrentStopIndex,
+                CurrentTripDistanceKm = tr.CurrentTripDistanceKm,
+                TotalDistanceTravelledKm = tr.TotalDistanceTravelledKm,
+                TotalTonnageDelivered = tr.TotalTonnageDelivered,
+                TotalRevenueEarned = tr.TotalRevenueEarned,
+                LastYieldRevenue = tr.LastYieldRevenue,
+                Stops = tr.Stops.Select(s => new IntermodalStopDto
+                {
+                    TerminalId = s.TerminalId,
+                    Action = s.Action,
+                    CargoFilter = s.CargoFilter
+                }).ToList()
+            }).ToList()
         };
 
         return JsonSerializer.Serialize(data, JsonOptions);
@@ -361,7 +424,9 @@ public static class SaveGameSerializer
                 {
                     RoadLevel = data.CellRoadLevels[idx],
                     OccupantId = data.CellOccupantIds[idx],
-                    RivalOwnerId = (data.CellRivalOwnerIds != null && idx < data.CellRivalOwnerIds.Length) ? data.CellRivalOwnerIds[idx] : 0
+                    RivalOwnerId = (data.CellRivalOwnerIds != null && idx < data.CellRivalOwnerIds.Length) ? data.CellRivalOwnerIds[idx] : 0,
+                    HasRail = data.CellHasRails != null && idx < data.CellHasRails.Length && data.CellHasRails[idx],
+                    HasRailSignal = data.CellHasRailSignals != null && idx < data.CellHasRailSignals.Length && data.CellHasRailSignals[idx]
                 };
                 if (data.CellOceanMask != null && idx < data.CellOceanMask.Length)
                     world.OceanMask[x, y] = data.CellOceanMask[idx];
@@ -695,6 +760,105 @@ public static class SaveGameSerializer
 
         engine.Milestones.RestoreState(data.UnlockedMilestones, data.RetiredFleetDistanceKm);
 
+        var railNodeMap = new Dictionary<int, RailNode>();
+        if (data.RailNodes != null)
+        {
+            foreach (var rn in data.RailNodes)
+            {
+                var node = new RailNode(rn.Id, rn.GridX, rn.GridY, rn.HasBlockSignal);
+                engine.RailNodes.Add(node);
+                railNodeMap[node.Id] = node;
+            }
+        }
+
+        var railEdgeMap = new Dictionary<int, RailEdge>();
+        if (data.RailEdges != null)
+        {
+            foreach (var re in data.RailEdges)
+            {
+                if (railNodeMap.TryGetValue(re.FromNodeId, out var fromN) && railNodeMap.TryGetValue(re.ToNodeId, out var toN))
+                {
+                    var edge = new RailEdge(re.Id, fromN, toN, re.DistanceKm, re.Structure)
+                    {
+                        BlockGroupId = Math.Max(1, re.BlockGroupId)
+                    };
+                    fromN.OutgoingEdges.Add(edge);
+                    engine.RailEdges.Add(edge);
+                    railEdgeMap[edge.Id] = edge;
+                }
+            }
+        }
+
+        if (data.IntermodalTerminals != null)
+        {
+            foreach (var yd in data.IntermodalTerminals)
+            {
+                railNodeMap.TryGetValue(yd.RailAccessNodeId ?? -1, out var rnAccess);
+                RoadNode? rdAccess = yd.RoadAccessNodeId.HasValue && nodeMap.TryGetValue(yd.RoadAccessNodeId.Value, out var rd) ? rd : null;
+                var yard = new IntermodalTerminal(yd.Id, yd.Name, yd.GridX, yd.GridY, rnAccess, rdAccess)
+                {
+                    LinkedHubId = yd.LinkedHubId,
+                    LinkedSeaportId = yd.LinkedSeaportId,
+                    TotalTransshippedUnits = yd.TotalTransshippedUnits
+                };
+                if (yd.StoredCargo != null)
+                {
+                    foreach (var kv in yd.StoredCargo)
+                    {
+                        if (Enum.TryParse<ResourceType>(kv.Key, out var rt))
+                            yard.StoredCargo[rt] = kv.Value;
+                    }
+                }
+                engine.IntermodalTerminals.Add(yard);
+            }
+        }
+
+        if (data.Trains != null)
+        {
+            foreach (var td in data.Trains)
+            {
+                var spec = RailCatalog.AvailableLocomotives.FirstOrDefault(s => s.Name == td.LocomotiveName)
+                           ?? RailCatalog.AvailableLocomotives[0];
+                var train = new Train(td.Id, td.Name, spec, td.WagonCount)
+                {
+                    Status = td.Status,
+                    LoadedCargoType = td.LoadedCargoType,
+                    LoadedCargoAmount = td.LoadedCargoAmount,
+                    WagonCategory = td.WagonCategory,
+                    BlockedBySignalAtNodeId = td.BlockedBySignalAtNodeId,
+                    CurrentStopIndex = td.CurrentStopIndex,
+                    CurrentTripDistanceKm = td.CurrentTripDistanceKm,
+                    TotalDistanceTravelledKm = td.TotalDistanceTravelledKm,
+                    TotalTonnageDelivered = td.TotalTonnageDelivered,
+                    TotalRevenueEarned = td.TotalRevenueEarned,
+                    LastYieldRevenue = td.LastYieldRevenue
+                };
+                if (td.LastNodeId.HasValue && railNodeMap.TryGetValue(td.LastNodeId.Value, out var ln))
+                    train.LastNode = ln;
+                if (td.CurrentEdgeId.HasValue && railEdgeMap.TryGetValue(td.CurrentEdgeId.Value, out var ce))
+                {
+                    train.CurrentEdge = ce;
+                    train.DistanceAlongCurrentEdgeKm = td.DistanceAlongCurrentEdgeKm;
+                }
+                if (td.RemainingEdgeIds != null)
+                {
+                    foreach (int eid in td.RemainingEdgeIds)
+                    {
+                        if (railEdgeMap.TryGetValue(eid, out var re))
+                            train.RemainingPath.Enqueue(re);
+                    }
+                }
+                if (td.Stops != null)
+                {
+                    foreach (var st in td.Stops)
+                        train.Stops.Add(new IntermodalStop(st.TerminalId, st.Action, st.CargoFilter));
+                }
+                engine.ActiveTrains.Add(train);
+            }
+        }
+
+        engine.RecomputeNextIds();
+
         engine.RestoreSimulationState(
             data.CurrentTick,
             data.CurrentWeather,
@@ -809,6 +973,75 @@ public static class SaveGameSerializer
         public FinancialLedgerDto? Financials { get; set; }
         public List<string>? UnlockedMilestones { get; set; } = new();
         public float RetiredFleetDistanceKm { get; set; }
+        public bool[]? CellHasRails { get; set; }
+        public bool[]? CellHasRailSignals { get; set; }
+        public List<RailNodeDto>? RailNodes { get; set; } = new();
+        public List<RailEdgeDto>? RailEdges { get; set; } = new();
+        public List<IntermodalTerminalDto>? IntermodalTerminals { get; set; } = new();
+        public List<TrainDto>? Trains { get; set; } = new();
+    }
+
+    public sealed class RailNodeDto
+    {
+        public int Id { get; set; }
+        public int GridX { get; set; }
+        public int GridY { get; set; }
+        public bool HasBlockSignal { get; set; }
+    }
+
+    public sealed class RailEdgeDto
+    {
+        public int Id { get; set; }
+        public int FromNodeId { get; set; }
+        public int ToNodeId { get; set; }
+        public float DistanceKm { get; set; }
+        public RailStructureType Structure { get; set; }
+        public int BlockGroupId { get; set; } = 1;
+    }
+
+    public sealed class IntermodalTerminalDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int GridX { get; set; }
+        public int GridY { get; set; }
+        public int? RailAccessNodeId { get; set; }
+        public int? RoadAccessNodeId { get; set; }
+        public int? LinkedHubId { get; set; }
+        public int? LinkedSeaportId { get; set; }
+        public int TotalTransshippedUnits { get; set; }
+        public Dictionary<string, int>? StoredCargo { get; set; } = new();
+    }
+
+    public sealed class IntermodalStopDto
+    {
+        public int TerminalId { get; set; }
+        public ScheduleAction Action { get; set; }
+        public ResourceType CargoFilter { get; set; }
+    }
+
+    public sealed class TrainDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string LocomotiveName { get; set; } = string.Empty;
+        public int WagonCount { get; set; }
+        public TrainStatus Status { get; set; }
+        public ResourceType LoadedCargoType { get; set; }
+        public int LoadedCargoAmount { get; set; }
+        public RailWagonCategory WagonCategory { get; set; }
+        public int? LastNodeId { get; set; }
+        public int? CurrentEdgeId { get; set; }
+        public float DistanceAlongCurrentEdgeKm { get; set; }
+        public List<int>? RemainingEdgeIds { get; set; } = new();
+        public int BlockedBySignalAtNodeId { get; set; }
+        public int CurrentStopIndex { get; set; }
+        public float CurrentTripDistanceKm { get; set; }
+        public float TotalDistanceTravelledKm { get; set; }
+        public int TotalTonnageDelivered { get; set; }
+        public long TotalRevenueEarned { get; set; }
+        public long LastYieldRevenue { get; set; }
+        public List<IntermodalStopDto>? Stops { get; set; } = new();
     }
 
     public sealed class GameCalendarDto

@@ -24,6 +24,10 @@ public class TruckVisualHandle
     public ResourceType DisplayedCargoType { get; set; } = ResourceType.None;
     public int DisplayedCargoBucket { get; set; } = -1;
     public string VisualSignature { get; set; } = string.Empty;
+    public string DisplayedPrimaryHex { get; set; } = string.Empty;
+    public string DisplayedStripeHex { get; set; } = string.Empty;
+    public PaintFinish DisplayedFinish { get; set; }
+    public TruckRank DisplayedRank { get; set; }
     public Vector3 LastForwardDir { get; set; } = Vector3.Forward;
     public float CurrentSteerYaw { get; set; }
     public float CurrentTrailerYaw { get; set; }
@@ -46,7 +50,7 @@ public class IndustrialConveyorItem
 /// - Edifícios coloridos (tijolinhos, casas menta, torres amarelas/azuis, caixas d'água);
 /// - Complexos industriais e depósitos brancos com teto verde.
 /// </summary>
-public static class ProceduralModels3D
+public static partial class ProceduralModels3D
 {
     public const float TileSize = 2.0f;
 
@@ -2608,7 +2612,11 @@ public static class ProceduralModels3D
         {
             Root = root,
             Headlights = new Node3D { Name = "Headlights", Visible = false },
-            VisualSignature = $"{(liveryOverride?.GetRenderKey() ?? "default")}|{(int)truck.Rank}"
+            VisualSignature = $"{(liveryOverride?.GetRenderKey() ?? "default")}|{(int)truck.Rank}",
+            DisplayedPrimaryHex = liveryOverride?.PrimaryColorHex ?? string.Empty,
+            DisplayedStripeHex = liveryOverride?.StripeColorHex ?? string.Empty,
+            DisplayedFinish = liveryOverride?.Finish ?? PaintFinish.Metallic,
+            DisplayedRank = truck.Rank
         };
 
         int specId = truck.Spec.Capacity switch

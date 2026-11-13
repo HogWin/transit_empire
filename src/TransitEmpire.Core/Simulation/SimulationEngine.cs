@@ -110,7 +110,7 @@ public class PlayerState
 /// <summary>
 /// Motor central da simulação determinística do Transit Empire.
 /// </summary>
-public class SimulationEngine
+public partial class SimulationEngine
 {
     public GeneratedWorld World { get; }
     public GameCalendar Calendar { get; } = new();
@@ -142,6 +142,7 @@ public class SimulationEngine
     private readonly Dictionary<(int X, int Y), RoadNode> _nearestNodeCache = new();
     private readonly Dictionary<(int X, int Y), RoadNode> _roadNodeByGrid = new();
     private readonly Dictionary<(int X, int Y), List<RoadEdge>> _edgesByTile = new();
+    private readonly Dictionary<int, Garage> _garageByTruckId = new();
     private int _cachedRoadNodeCount = -1;
     private int _cachedRoadEdgeCount = -1;
     private readonly Dictionary<int, TollStation> _tollByNodeId = new();
@@ -251,6 +252,19 @@ public class SimulationEngine
         _nextContractId = ActiveContracts.Count > 0 ? ActiveContracts.Max(c => c.Id) + 1 : 1;
         RebuildTollLookupCache();
         RebuildRoadSpatialCache();
+        RebuildGarageTruckLookup();
+        RecomputeNextRailIds();
+    }
+
+    private void RebuildGarageTruckLookup()
+    {
+        _garageByTruckId.Clear();
+        for (int g = 0; g < Garages.Count; g++)
+        {
+            var garage = Garages[g];
+            for (int t = 0; t < garage.StationedTrucks.Count; t++)
+                _garageByTruckId[garage.StationedTrucks[t].Id] = garage;
+        }
     }
 
     internal void RestoreSimulationState(
@@ -603,23 +617,45 @@ public class SimulationEngine
         switch (stop.Kind)
         {
             case ScheduleStopKind.Industry:
-                var ind = World.Industries.FirstOrDefault(i => i.Id == stop.TargetId);
-                return ind != null ? FindNearestRoadNodeCached(ind.GridX, ind.GridY) : null;
+                for (int i = 0; i < World.Industries.Count; i++)
+                    if (World.Industries[i].Id == stop.TargetId)
+                        return FindNearestRoadNodeCached(World.Industries[i].GridX, World.Industries[i].GridY);
+                return null;
             case ScheduleStopKind.City:
-                var city = World.Cities.FirstOrDefault(c => c.Id == stop.TargetId);
-                return city != null ? FindNearestRoadNodeCached(city.CenterX, city.CenterY) : null;
+                for (int i = 0; i < World.Cities.Count; i++)
+                    if (World.Cities[i].Id == stop.TargetId)
+                        return FindNearestRoadNodeCached(World.Cities[i].CenterX, World.Cities[i].CenterY);
+                return null;
             case ScheduleStopKind.LogisticsHub:
-                return LogisticsHubs.FirstOrDefault(h => h.Id == stop.TargetId)?.AccessNode;
+                for (int i = 0; i < LogisticsHubs.Count; i++)
+                    if (LogisticsHubs[i].Id == stop.TargetId)
+                        return LogisticsHubs[i].AccessNode;
+                return null;
             case ScheduleStopKind.Garage:
-                return Garages.FirstOrDefault(g => g.Id == stop.TargetId)?.AccessNode;
+                for (int i = 0; i < Garages.Count; i++)
+                    if (Garages[i].Id == stop.TargetId)
+                        return Garages[i].AccessNode;
+                return null;
             case ScheduleStopKind.Seaport:
-                var seaport = World.Seaports.FirstOrDefault(s => s.Id == stop.TargetId);
-                return seaport != null ? FindNearestRoadNodeCached(seaport.GridX, seaport.GridY) : null;
+                for (int i = 0; i < World.Seaports.Count; i++)
+                    if (World.Seaports[i].Id == stop.TargetId)
+                        return FindNearestRoadNodeCached(World.Seaports[i].GridX, World.Seaports[i].GridY);
+                return null;
             case ScheduleStopKind.RegionalLandmark:
-                var landmark = World.Landmarks.FirstOrDefault(l => l.Id == stop.TargetId);
-                return landmark != null ? FindNearestRoadNodeCached(landmark.GridX, landmark.GridY) : null;
+                for (int i = 0; i < World.Landmarks.Count; i++)
+                    if (World.Landmarks[i].Id == stop.TargetId)
+                        return FindNearestRoadNodeCached(World.Landmarks[i].GridX, World.Landmarks[i].GridY);
+                return null;
             case ScheduleStopKind.BusTerminal:
-                return BusTerminals.FirstOrDefault(b => b.Id == stop.TargetId)?.AccessNode;
+                for (int i = 0; i < BusTerminals.Count; i++)
+                    if (BusTerminals[i].Id == stop.TargetId)
+                        return BusTerminals[i].AccessNode;
+                return null;
+            case ScheduleStopKind.IntermodalYard:
+                for (int i = 0; i < IntermodalTerminals.Count; i++)
+                    if (IntermodalTerminals[i].Id == stop.TargetId)
+                        return IntermodalTerminals[i].RoadAccessNode;
+                return null;
             default:
                 return null;
         }
@@ -636,6 +672,7 @@ public class SimulationEngine
             ScheduleStopKind.Seaport => World.Seaports.FirstOrDefault(s => s.Id == stop.TargetId)?.Name ?? $"Porto #{stop.TargetId}",
             ScheduleStopKind.RegionalLandmark => World.Landmarks.FirstOrDefault(l => l.Id == stop.TargetId)?.Name ?? $"Mega-Obra #{stop.TargetId}",
             ScheduleStopKind.BusTerminal => BusTerminals.FirstOrDefault(b => b.Id == stop.TargetId)?.Name ?? $"Rodoviária #{stop.TargetId}",
+            ScheduleStopKind.IntermodalYard => IntermodalTerminals.FirstOrDefault(y => y.Id == stop.TargetId)?.Name ?? $"Pátio #{stop.TargetId}",
             _ => $"Parada #{stop.TargetId}"
         };
     }
@@ -661,6 +698,7 @@ public class SimulationEngine
             LastNode = garage.AccessNode
         };
         garage.AddTruck(truck);
+        _garageByTruckId[truck.Id] = garage;
         ActiveTrucks.Add(truck);
         return truck;
     }
@@ -955,6 +993,7 @@ public class SimulationEngine
             Garages.FirstOrDefault(g => !g.IsFull)?.AddTruck(newTruck);
 
         ActiveTrucks[truckIndex] = newTruck;
+        RebuildGarageTruckLookup();
         Milestones.RetiredFleetDistanceKm += oldTruck.TotalDistanceTravelledKm;
         return newTruck;
     }
@@ -1008,6 +1047,7 @@ public class SimulationEngine
             long refund = (long)Math.Round(8000 * 0.40);
             World.Grid[x, y].OccupantId = 0;
             Garages.Remove(garage);
+            RebuildGarageTruckLookup();
             Player.Balance += refund;
             result = new DemolishResult(DemolishTargetKind.Garage, x, y, garage.Id, RoadStructureType.Ground, refund);
             message = $"🚜 {garage.Name} demolida (+R$ {refund:N0} reembolso 40%).";
@@ -1037,6 +1077,9 @@ public class SimulationEngine
             message = $"🚜 {terminal.Name} demolida (+R$ {refund:N0} reembolso 40%).";
             return true;
         }
+
+        if (TryDemolishRailEntityAt(x, y, out result, out message))
+            return result.Kind != DemolishTargetKind.None;
 
         ref var cell = ref World.Grid[x, y];
         if (!cell.HasRoad)
@@ -1314,6 +1357,7 @@ public class SimulationEngine
             }
 
             ProcessCitiesDailyCycle();
+            ProcessIntermodalDailyCycle();
             CollectDailyPassiveTolls();
             ProcessRivalsDailyCycle();
             UpdateDynamicWeather();
@@ -1335,6 +1379,9 @@ public class SimulationEngine
 
         // 3. Executa agendas multi-paradas, espera condicional e pit-stops automáticos
         ProcessScheduledTrucks();
+
+        // 4. Simula malha férrea, sinaleiros de bloco e composições intermodais
+        TickRailNetwork(deltaHours);
     }
 
     private void UpdateDynamicWeather()
@@ -1426,11 +1473,8 @@ public class SimulationEngine
 
     private bool ConsumeFleetFuel(Truck truck, RoadEdge? traversedEdge, float deltaKm)
     {
-        foreach (var garage in Garages)
-        {
-            if (garage.FuelStock > 0 && garage.StationedTrucks.Contains(truck))
-                return garage.TryConsumeFuelForTravel(deltaKm);
-        }
+        if (_garageByTruckId.TryGetValue(truck.Id, out var homeGarage) && homeGarage.FuelStock > 0)
+            return homeGarage.TryConsumeFuelForTravel(deltaKm);
 
         RoadEdge? activeEdge = truck.CurrentEdge ?? traversedEdge;
         RoadNode? refNodeA = activeEdge?.FromNode;
@@ -1821,6 +1865,10 @@ public class SimulationEngine
                             var landmark = World.Landmarks.FirstOrDefault(l => l.Id == stop.TargetId);
                             if (landmark != null) DeliverCargoToLandmark(truck, landmark);
                             break;
+                        case ScheduleStopKind.IntermodalYard:
+                            var yard = IntermodalTerminals.FirstOrDefault(y => y.Id == stop.TargetId);
+                            if (yard != null) DeliverCargoToIntermodalTerminal(truck, yard);
+                            break;
                     }
                 }
             }
@@ -2067,6 +2115,13 @@ public class SimulationEngine
                 RefreshTruckSpecialConvoyState(truck);
             }
             return withdrawn;
+        }
+
+        if (stop.Kind == ScheduleStopKind.IntermodalYard)
+        {
+            var yard = IntermodalTerminals.FirstOrDefault(y => y.Id == stop.TargetId);
+            if (yard == null) return 0;
+            return TryLoadAtIntermodalTerminal(truck, yard, stop);
         }
 
         return 0;
@@ -2699,6 +2754,7 @@ public class SimulationEngine
 
         _nearestNodeCache.Clear();
         RefreshUrbanTrafficPenalties();
+        RefreshIntermodalLinks();
         Pathfinder.InvalidateCache();
         EvaluateMilestones();
         return true;
@@ -4305,12 +4361,21 @@ public class SimulationEngine
             return;
         _trafficSpawnAccumulator = 0f;
 
-        int totalPop = World.Cities.Sum(c => c.Population);
+        int totalPop = 0;
+        for (int c = 0; c < World.Cities.Count; c++)
+            totalPop += World.Cities[c].Population;
         int civilBudget = Math.Clamp(3 + totalPop / 110, 4, 18);
         int rivalBudget = Math.Min(4, Rivals.Count * 2);
 
-        int currentCivil = TrafficVehicles.Count(v => v.Kind != TrafficVehicleKind.RivalTruck);
-        int currentRival = TrafficVehicles.Count(v => v.Kind == TrafficVehicleKind.RivalTruck);
+        int currentCivil = 0;
+        int currentRival = 0;
+        for (int v = 0; v < TrafficVehicles.Count; v++)
+        {
+            if (TrafficVehicles[v].Kind == TrafficVehicleKind.RivalTruck)
+                currentRival++;
+            else
+                currentCivil++;
+        }
 
         if (currentCivil < civilBudget)
         {
@@ -4469,7 +4534,10 @@ public enum DemolishTargetKind
     Garage,
     LogisticsHub,
     TollStation,
-    BusTerminal
+    BusTerminal,
+    Rail,
+    RailSignal,
+    IntermodalYard
 }
 
 public readonly record struct DemolishResult(

@@ -12,7 +12,8 @@ public enum BottleneckKind
     CongestedCorridor,
     StalledIndustry,
     QueuedTruck,
-    UnsuppliedCity
+    UnsuppliedCity,
+    RailBottleneck
 }
 
 public enum BottleneckSeverity
@@ -221,6 +222,61 @@ public static class OperationalDiagnostics
                     worstResource != ResourceType.None
                         ? $"Crie uma linha entregando {worstResource} em {city.Name}."
                         : $"Reforce as entregas urbanas para {city.Name}."));
+            }
+        }
+
+        // 5. Gargalos Ferroviários & Pátios Intermodais (Sprint F5+)
+        for (int i = 0; i < engine.ActiveTrains.Count; i++)
+        {
+            var train = engine.ActiveTrains[i];
+            if (train.Status == TrainStatus.WaitingAtSignal)
+            {
+                RailNode? sigNode = null;
+                for (int n = 0; n < engine.RailNodes.Count; n++)
+                {
+                    if (engine.RailNodes[n].Id == train.BlockedBySignalAtNodeId)
+                    {
+                        sigNode = engine.RailNodes[n];
+                        break;
+                    }
+                }
+                int sx = sigNode?.GridX ?? train.LastNode?.GridX ?? 0;
+                int sy = sigNode?.GridY ?? train.LastNode?.GridY ?? 0;
+                results.Add(new OperationalBottleneck(
+                    BottleneckKind.RailBottleneck,
+                    BottleneckSeverity.Warning,
+                    $"🚦 {train.Name} retido no sinaleiro",
+                    $"Composição aguardando liberação de bloco próximo a ({sx}, {sy}).",
+                    sx,
+                    sy,
+                    "Adicione mais sinaleiros intermediários ou um desvio de cruzamento paralelo."));
+            }
+        }
+
+        for (int i = 0; i < engine.IntermodalTerminals.Count; i++)
+        {
+            var yard = engine.IntermodalTerminals[i];
+            if (yard.RoadAccessNode == null)
+            {
+                results.Add(new OperationalBottleneck(
+                    BottleneckKind.RailBottleneck,
+                    BottleneckSeverity.Warning,
+                    $"🏗️ {yard.Name} sem acesso rodoviário",
+                    "Caminhões não alcançam este pátio intermodal.",
+                    yard.GridX,
+                    yard.GridY,
+                    "Construa uma estrada a até 4 blocos deste pátio."));
+            }
+            else if (yard.TotalStoredUnits >= (int)(yard.MaxStorageCapacity * 0.85f))
+            {
+                results.Add(new OperationalBottleneck(
+                    BottleneckKind.RailBottleneck,
+                    BottleneckSeverity.Critical,
+                    $"📦 {yard.Name} quase lotado ({yard.TotalStoredUnits}/{yard.MaxStorageCapacity}t)",
+                    "Pátio intermodal saturado — baldeação limitada.",
+                    yard.GridX,
+                    yard.GridY,
+                    "Adicione outro trem ou caminhões distribuidores a partir deste pátio."));
             }
         }
 

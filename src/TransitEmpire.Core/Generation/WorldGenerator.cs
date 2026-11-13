@@ -12,13 +12,22 @@ public enum WorldScenario
     AlpineRange = 2
 }
 
+public enum MountainDensity
+{
+    Few = 0,
+    Normal = 1,
+    Many = 2
+}
+
 public record WorldGenerationConfig(
     int Width = 100,
     int Height = 100,
     int CityCount = 6,
     int IndustryCount = 10,
     int Seed = 1337,
-    WorldScenario Scenario = WorldScenario.Balanced
+    WorldScenario Scenario = WorldScenario.Balanced,
+    bool HasRivers = true,
+    MountainDensity Mountains = MountainDensity.Normal
 );
 
 public class GeneratedWorld
@@ -192,7 +201,20 @@ public class WorldGenerator
 
         // B. Cordilheiras & Colinas (sopés em volta das montanhas para relevo natural)
         int[,] elevation = new int[w, h]; // 0 = planície, 1 = colina, 2 = montanha
-        int ridgeRadius = isAlpine ? (hasOceanChannel ? 4 : 3) : (isArchipelago ? 1 : (hasOceanChannel ? 3 : 2));
+        int baseRadius = isAlpine ? (hasOceanChannel ? 4 : 3) : (isArchipelago ? 1 : (hasOceanChannel ? 3 : 2));
+        int ridgeRadius = _config.Mountains switch
+        {
+            MountainDensity.Few => Math.Max(1, baseRadius - 1),
+            MountainDensity.Many => baseRadius + 1,
+            _ => baseRadius
+        };
+        float peakChanceScale = _config.Mountains switch
+        {
+            MountainDensity.Few => 0.45f,
+            MountainDensity.Many => 1.35f,
+            _ => 1.0f
+        };
+
         CarveMountainRidge(
             world,
             elevation,
@@ -201,11 +223,13 @@ public class WorldGenerator
             endX: Math.Clamp((int)(w * (hasOceanChannel ? 0.48f : 0.68f)), 6, w - 6),
             endY: Math.Clamp((int)(h * 0.28f), 6, h - 6),
             halfRadius: ridgeRadius,
-            phase: phaseA);
+            phase: phaseA,
+            peakScale: peakChanceScale);
 
-        if (hasOceanChannel && !isArchipelago)
+        if ((hasOceanChannel && !isArchipelago && _config.Mountains != MountainDensity.Few) ||
+            _config.Mountains == MountainDensity.Many)
         {
-            // Segunda cadeia de colinas ao centro-sul do continente principal (dá variedade sem fechar caminhos)
+            // Segunda cadeia de colinas ao centro-sul do continente principal
             CarveMountainRidge(
                 world,
                 elevation,
@@ -213,22 +237,27 @@ public class WorldGenerator
                 startY: (int)(h * 0.62f),
                 endX: (int)(w * 0.28f),
                 endY: (int)(h * 0.78f),
-                halfRadius: isAlpine ? 3 : 2,
-                phase: phaseB);
+                halfRadius: _config.Mountains == MountainDensity.Many ? 3 : (isAlpine ? 3 : 2),
+                phase: phaseB,
+                peakScale: peakChanceScale);
 
-            // Cadeia de colinas minerais no continente ultramarino (Leste)
-            CarveMountainRidge(
-                world,
-                elevation,
-                startX: Math.Clamp((int)(w * 0.84f), 6, w - 5),
-                startY: Math.Clamp((int)(h * 0.24f), 6, h - 6),
-                endX: Math.Clamp((int)(w * 0.90f), 6, w - 4),
-                endY: Math.Clamp((int)(h * 0.56f), 6, h - 6),
-                halfRadius: isAlpine ? 3 : 2,
-                phase: phaseC);
+            if (hasOceanChannel)
+            {
+                // Cadeia de colinas minerais no continente ultramarino (Leste)
+                CarveMountainRidge(
+                    world,
+                    elevation,
+                    startX: Math.Clamp((int)(w * 0.84f), 6, w - 5),
+                    startY: Math.Clamp((int)(h * 0.24f), 6, h - 6),
+                    endX: Math.Clamp((int)(w * 0.90f), 6, w - 4),
+                    endY: Math.Clamp((int)(h * 0.56f), 6, h - 6),
+                    halfRadius: _config.Mountains == MountainDensity.Many ? 3 : (isAlpine ? 3 : 2),
+                    phase: phaseC,
+                    peakScale: peakChanceScale);
+            }
         }
 
-        if (isAlpine)
+        if (isAlpine || _config.Mountains == MountainDensity.Many)
         {
             // Maciço central elevado com desfiladeiros para túneis
             CarveMountainRidge(
@@ -239,7 +268,8 @@ public class WorldGenerator
                 endX: Math.Clamp((int)(w * 0.46f), 6, w - 6),
                 endY: Math.Clamp((int)(h * 0.50f), 6, h - 6),
                 halfRadius: hasOceanChannel ? 3 : 2,
-                phase: phaseC + 1.1f);
+                phase: phaseC + 1.1f,
+                peakScale: peakChanceScale);
         }
 
         for (int x = 0; x < w; x++)
@@ -257,21 +287,24 @@ public class WorldGenerator
         }
 
         // C. Rios sinuosos nascendo nas serras e desaguando no Oceano
-        CarveRiverToSea(
-            world,
-            startX: Math.Clamp((int)(w * 0.20f), 4, w - 6),
-            startY: Math.Clamp((int)(h * 0.24f), 4, h - 6),
-            hasOceanChannel: hasOceanChannel,
-            meanderPhase: phaseB);
-
-        if (hasOceanChannel)
+        if (_config.HasRivers)
         {
             CarveRiverToSea(
                 world,
-                startX: Math.Clamp((int)(w * 0.18f), 4, w - 6),
-                startY: Math.Clamp((int)(h * 0.72f), 4, h - 6),
-                hasOceanChannel: true,
-                meanderPhase: phaseC);
+                startX: Math.Clamp((int)(w * 0.20f), 4, w - 6),
+                startY: Math.Clamp((int)(h * 0.24f), 4, h - 6),
+                hasOceanChannel: hasOceanChannel,
+                meanderPhase: phaseB);
+
+            if (hasOceanChannel)
+            {
+                CarveRiverToSea(
+                    world,
+                    startX: Math.Clamp((int)(w * 0.18f), 4, w - 6),
+                    startY: Math.Clamp((int)(h * 0.72f), 4, h - 6),
+                    hasOceanChannel: true,
+                    meanderPhase: phaseC);
+            }
         }
 
         // D. Biomas coerentes com relevo, latitude e sombra de chuva
@@ -322,11 +355,14 @@ public class WorldGenerator
         int endX,
         int endY,
         int halfRadius,
-        float phase)
+        float phase,
+        float peakScale = 1.0f)
     {
         int w = world.Grid.GetLength(0);
         int h = world.Grid.GetLength(1);
         int steps = Math.Max(12, Math.Abs(endX - startX) + Math.Abs(endY - startY));
+        double mountainProb = Math.Clamp(0.78 * peakScale, 0.25, 0.92);
+        double hillProb = Math.Clamp(0.80 * peakScale, 0.40, 0.94);
 
         for (int s = 0; s <= steps; s++)
         {
@@ -346,9 +382,9 @@ public class WorldGenerator
                         continue;
 
                     float d = MathF.Sqrt(dx * dx + dy * dy);
-                    if (d <= 0.8f && _rng.NextDouble() > 0.22)
+                    if (d <= 0.8f * peakScale && _rng.NextDouble() < mountainProb)
                         elevation[nx, ny] = Math.Max(elevation[nx, ny], 2);
-                    else if (d <= halfRadius + 0.35f && _rng.NextDouble() > 0.20)
+                    else if (d <= halfRadius + 0.35f && _rng.NextDouble() < hillProb)
                         elevation[nx, ny] = Math.Max(elevation[nx, ny], 1);
                 }
             }

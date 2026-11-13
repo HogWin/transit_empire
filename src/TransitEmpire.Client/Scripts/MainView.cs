@@ -23,6 +23,9 @@ public partial class MainView : Node3D
         BuildLogisticsHub,
         BuildBusTerminal,
         BuildTollStation,
+        BuildRail,
+        BuildRailSignal,
+        BuildIntermodalYard,
         Demolish
     }
 
@@ -32,6 +35,7 @@ public partial class MainView : Node3D
         Schedule,
         Research,
         Fleet,
+        Rail,
         Contracts,
         Operations,
         Bank,
@@ -107,6 +111,10 @@ public partial class MainView : Node3D
     private readonly List<MultiMeshInstance3D> _vegShadowCasters = new();
     private readonly HashSet<int> _activeTruckIdsScratch = new();
     private readonly HashSet<int> _activeNpcIdsScratch = new();
+    private readonly List<int> _staleIdsScratch = new();
+    private readonly List<Vector2> _minimapTrainScratch = new();
+    private (int X, int Y) _lastHoverTipCell = (-1, -1);
+    private ToolMode _lastHoverTipTool = ToolMode.Inspect;
     private PanelContainer? _graphicsModal;
     private CheckBox? _chkSsao;
     private CheckBox? _chkGlow;
@@ -130,6 +138,8 @@ public partial class MainView : Node3D
     private float _hudScaleFactor = 1.0f;
     private int _selectedMapSize = 100;
     private WorldScenario _selectedScenario = WorldScenario.Balanced;
+    private bool _selectedHasRivers = true;
+    private MountainDensity _selectedMountains = MountainDensity.Normal;
     private OptionButton? _mapSizeSelect;
     private OptionButton? _scenarioSelect;
     private PanelContainer? _tutorialPanel;
@@ -383,6 +393,10 @@ public partial class MainView : Node3D
         _selectedScenario = Enum.TryParse<WorldScenario>(_clientSettings.PreferredScenario, out var parsedScen)
             ? parsedScen
             : WorldScenario.Balanced;
+        _selectedHasRivers = _clientSettings.PreferredHasRivers;
+        _selectedMountains = Enum.TryParse<MountainDensity>(_clientSettings.PreferredMountains, out var parsedMtns)
+            ? parsedMtns
+            : MountainDensity.Normal;
         _autoSaveEnabled = _clientSettings.AutoSaveEnabled;
         _userVsyncEnabled = _clientSettings.VSyncEnabled;
         _hudScaleFactor = Math.Clamp(_clientSettings.HudScale, 0.85f, 1.25f);
@@ -393,10 +407,10 @@ public partial class MainView : Node3D
         _audio.AmbientVolume = Math.Clamp(_clientSettings.AmbientVolume, 0f, 1f);
         _audio.SetMuted(_clientSettings.AudioMuted);
 
-        // 1. Inicializa a simulação com Seed RNG aleatória a cada nova partida (Pausada por padrão)
+        // 1. Inicializa a simulação com Seed RNG aleatória para compor o diorama de fundo do menu
         InitializeSimulation(seed: null);
 
-        // 2. Configura ambiente Voxel Tycoon, mundo e HUD
+        // 2. Configura ambiente Voxel Tycoon, mundo, HUD e menu prévio
         SetupEnvironmentAndCamera();
         ApplySavedSettingsOnStartup();
         BuildInitialWorld3D();
@@ -408,15 +422,19 @@ public partial class MainView : Node3D
 
         LogEvent($"🎲 Mundo {_selectedMapSize}x{_selectedMapSize} gerado (Seed #{_bridge.Seed})! Pressione [ESPAÇO] ou ▶ para iniciar.");
         RefreshHud();
+        EnterMainMenu();
     }
 
-    private void InitializeSimulation(int? seed)
+    private void InitializeSimulation(int? seed, GeneratedWorld? prebuiltWorld = null)
     {
         _bridge = new SimulationBridge(
             width: _selectedMapSize,
             height: _selectedMapSize,
             seed: seed,
-            scenario: _selectedScenario);
+            scenario: _selectedScenario,
+            hasRivers: _selectedHasRivers,
+            mountains: _selectedMountains,
+            prebuiltWorld: prebuiltWorld);
         _bridge.TimeScale = 0.0f;
         _bridge.SeedInitialFleetAndInfrastructure();
         _tutorialRoadBuilt = false;
@@ -491,6 +509,8 @@ public partial class MainView : Node3D
         _clientSettings.AutoSaveEnabled = _autoSaveEnabled;
         _clientSettings.PreferredMapSize = _selectedMapSize;
         _clientSettings.PreferredScenario = _selectedScenario.ToString();
+        _clientSettings.PreferredHasRivers = _selectedHasRivers;
+        _clientSettings.PreferredMountains = _selectedMountains.ToString();
         ClientSettingsStore.Save(_clientSettings);
     }
 
@@ -563,6 +583,7 @@ public partial class MainView : Node3D
         _seaportSeaRoutes.Clear();
         _landmarkVisuals.Clear();
         _truckHornCooldowns.Clear();
+        ClearRailVisuals();
         foreach (var (part, _) in _transientParticles)
         {
             if (IsInstanceValid(part))
@@ -905,6 +926,7 @@ public partial class MainView : Node3D
             SpawnLandmarkMesh(landmark);
         }
 
+        RebuildAllRailAndStructures3D();
         InitializeOverlayMultiMeshes();
         _minimapStaticDirty = true;
     }
@@ -1348,6 +1370,14 @@ public partial class MainView : Node3D
     {
         float dt = (float)delta;
 
+        if (_inMainMenu)
+        {
+            _cameraYaw += dt * 0.08f;
+            UpdateCameraTransform();
+            UpdateDayNightAndWeatherLighting(dt);
+            return;
+        }
+
         HandleCameraKeyboardPan(dt);
         UpdateFloatingPopups(dt);
 
@@ -1466,6 +1496,7 @@ public partial class MainView : Node3D
 
             UpdateDayNightAndWeatherLighting(dt);
             SyncFleet3DTransforms(dt);
+            SyncRailAndTrains3D(dt);
             SyncTraffic3DTransforms(dt);
             UpdateTollGatesAnimation(dt);
         }
@@ -1519,8 +1550,9 @@ public partial class MainView : Node3D
         Vector2 camGrid = new(_cameraPivot.Position.X / ts, _cameraPivot.Position.Z / ts);
 
         _minimapTruckScratch.Clear();
-        foreach (var truck in _bridge.Engine.ActiveTrucks)
+        for (int i = 0; i < _bridge.Engine.ActiveTrucks.Count; i++)
         {
+            var truck = _bridge.Engine.ActiveTrucks[i];
             if (_truckVisuals.TryGetValue(truck.Id, out var vis))
             {
                 Vector3 p = vis.Root.Position;
@@ -1528,7 +1560,18 @@ public partial class MainView : Node3D
             }
         }
 
-        _minimapOverlay.UpdateDynamicMarkers(camGrid, _cameraDistance, _minimapTruckScratch);
+        _minimapTrainScratch.Clear();
+        for (int i = 0; i < _bridge.Engine.ActiveTrains.Count; i++)
+        {
+            var train = _bridge.Engine.ActiveTrains[i];
+            if (_trainVisuals.TryGetValue(train.Id, out var tVis))
+            {
+                Vector3 tp = tVis.Root.Position;
+                _minimapTrainScratch.Add(new Vector2(tp.X / ts, tp.Z / ts));
+            }
+        }
+
+        _minimapOverlay.UpdateDynamicMarkers(camGrid, _cameraDistance, _minimapTruckScratch, _minimapTrainScratch);
     }
 
     private void HandleCameraKeyboardPan(float dt)
@@ -1922,7 +1965,6 @@ public partial class MainView : Node3D
         {
             activeIds.Add(truck.Id);
             FleetLivery effectiveLivery = _bridge.GetEffectiveLivery(truck);
-            string desiredSignature = $"{effectiveLivery.GetRenderKey()}|{(int)truck.Rank}";
 
             if (!_truckVisuals.TryGetValue(truck.Id, out var handle))
             {
@@ -1931,7 +1973,10 @@ public partial class MainView : Node3D
                 _trucksRoot.AddChild(handle.Root);
                 _truckVisuals[truck.Id] = handle;
             }
-            else if (handle.VisualSignature != desiredSignature)
+            else if (handle.DisplayedRank != truck.Rank
+                || handle.DisplayedFinish != effectiveLivery.Finish
+                || !string.Equals(handle.DisplayedPrimaryHex, effectiveLivery.PrimaryColorHex, StringComparison.Ordinal)
+                || !string.Equals(handle.DisplayedStripeHex, effectiveLivery.StripeColorHex, StringComparison.Ordinal))
             {
                 Vector3 prevPos = handle.Root.GlobalPosition;
                 Vector3 prevDir = handle.LastForwardDir;
@@ -2064,9 +2109,15 @@ public partial class MainView : Node3D
 
         if (_truckVisuals.Count > activeIds.Count)
         {
-            var staleIds = _truckVisuals.Keys.Where(id => !activeIds.Contains(id)).ToList();
-            foreach (int staleId in staleIds)
+            _staleIdsScratch.Clear();
+            foreach (int existingId in _truckVisuals.Keys)
             {
+                if (!activeIds.Contains(existingId))
+                    _staleIdsScratch.Add(existingId);
+            }
+            for (int i = 0; i < _staleIdsScratch.Count; i++)
+            {
+                int staleId = _staleIdsScratch[i];
                 if (_truckVisuals.TryGetValue(staleId, out var staleHandle) && IsInstanceValid(staleHandle.Root))
                     staleHandle.Root.QueueFree();
                 _truckVisuals.Remove(staleId);
@@ -2128,9 +2179,15 @@ public partial class MainView : Node3D
 
         if (_trafficVisuals.Count > activeNpcIds.Count)
         {
-            var staleNpcIds = _trafficVisuals.Keys.Where(id => !activeNpcIds.Contains(id)).ToList();
-            foreach (int staleId in staleNpcIds)
+            _staleIdsScratch.Clear();
+            foreach (int existingId in _trafficVisuals.Keys)
             {
+                if (!activeNpcIds.Contains(existingId))
+                    _staleIdsScratch.Add(existingId);
+            }
+            for (int i = 0; i < _staleIdsScratch.Count; i++)
+            {
+                int staleId = _staleIdsScratch[i];
                 if (_trafficVisuals.TryGetValue(staleId, out var stale) && IsInstanceValid(stale.Root))
                     stale.Root.QueueFree();
                 _trafficVisuals.Remove(staleId);
@@ -2323,6 +2380,9 @@ public partial class MainView : Node3D
 
     public override void _Input(InputEvent @event)
     {
+        if (_inMainMenu)
+            return;
+
         // Garante que soltar o botão direito ou do meio sobre qualquer painel do HUD sempre encerra o movimento
         if (@event is InputEventMouseButton mb && !mb.Pressed)
         {
@@ -2371,6 +2431,23 @@ public partial class MainView : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (_inMainMenu)
+        {
+            if (@event is InputEventKey menuKey && menuKey.Pressed && !menuKey.Echo && menuKey.Keycode == Key.Escape)
+            {
+                if (_graphicsModal != null && _graphicsModal.Visible)
+                {
+                    _graphicsModal.Visible = false;
+                }
+                else if (_newGameCreatorCard != null && _newGameCreatorCard.Visible)
+                {
+                    _newGameCreatorCard.Visible = false;
+                    if (_mainMenuHomeCard != null) _mainMenuHomeCard.Visible = true;
+                }
+            }
+            return;
+        }
+
         if (@event is InputEventMouseButton mb)
         {
             if (mb.ButtonIndex == MouseButton.Right)
@@ -2406,11 +2483,14 @@ public partial class MainView : Node3D
                 UpdateHoveredGridCell(mb.Position);
                 if (_hoveredCell.X >= 0)
                 {
-                    if (_activeTool == ToolMode.BuildRoad)
+                    if (_activeTool == ToolMode.BuildRoad || _activeTool == ToolMode.BuildRail)
                     {
                         _isDraggingRoad = true;
                         _roadDragStart = _hoveredCell;
-                        UpdateRoadDragPreview();
+                        if (_activeTool == ToolMode.BuildRail)
+                            UpdateRailDragPreview();
+                        else
+                            UpdateRoadDragPreview();
                     }
                     else
                     {
@@ -2421,15 +2501,21 @@ public partial class MainView : Node3D
             }
             else if (mb.ButtonIndex == MouseButton.Left && !mb.Pressed && _isDraggingRoad)
             {
-                CommitRoadDrag();
+                if (_activeTool == ToolMode.BuildRail)
+                    CommitRailDrag();
+                else
+                    CommitRoadDrag();
             }
         }
         else if (@event is InputEventMouseMotion mm && !_isOrbiting && !_isPanning)
         {
             UpdateHoveredGridCell(mm.Position);
-            if (_isDraggingRoad && _activeTool == ToolMode.BuildRoad)
+            if (_isDraggingRoad)
             {
-                UpdateRoadDragPreview();
+                if (_activeTool == ToolMode.BuildRail)
+                    UpdateRailDragPreview();
+                else if (_activeTool == ToolMode.BuildRoad)
+                    UpdateRoadDragPreview();
             }
         }
         else if (@event is InputEventKey key && key.Pressed && !key.Echo)
@@ -2457,6 +2543,14 @@ public partial class MainView : Node3D
                 CycleFollowTruckCamera();
             else if (key.Keycode == Key.P)
                 TogglePipCamera();
+            else if (key.Keycode == Key.Q)
+                SetActiveTool(ToolMode.Inspect);
+            else if (key.Keycode == Key.B)
+                SetActiveTool(ToolMode.BuildRoad);
+            else if (key.Keycode == Key.R)
+                SetActiveTool(ToolMode.BuildRail);
+            else if (key.Keycode == Key.X)
+                SetActiveTool(ToolMode.Demolish);
             else if (key.Keycode == Key.Tab)
             {
                 int nextMode = ((int)_overlayMode + 1) % 4;
@@ -2790,12 +2884,50 @@ public partial class MainView : Node3D
             _hoveredCell = (gx, gy);
             _hoverCursor.Position = GridToWorld(gx, gy) + new Vector3(0, 0.08f, 0);
             _hoverCursor.Visible = true;
+            if (!_isDraggingRoad && (_lastHoverTipCell != _hoveredCell || _lastHoverTipTool != _activeTool))
+            {
+                _lastHoverTipCell = _hoveredCell;
+                _lastHoverTipTool = _activeTool;
+                UpdateHoverCostPreview(gx, gy);
+            }
         }
         else
         {
             _hoveredCell = (-1, -1);
             _hoverCursor.Visible = false;
         }
+    }
+
+    private void UpdateHoverCostPreview(int gx, int gy)
+    {
+        if (_topAlertLabel == null)
+            return;
+
+        var cell = _bridge.World.Grid[gx, gy];
+        string preview = _activeTool switch
+        {
+            ToolMode.BuildRoad => cell.HasRoad
+                ? $"({gx},{gy}) Via existente ({cell.RoadLevel})"
+                : (cell.OccupantId != 0 || _bridge.World.OceanMask[gx, gy]
+                    ? $"({gx},{gy}) Local bloqueado"
+                    : $"({gx},{gy}) {(cell.Terrain == TerrainType.Water ? "🌉 Ponte" : (cell.Terrain is TerrainType.Hills or TerrainType.Mountain ? "🚇 Túnel" : "🛤️ Estrada"))}: R$ {(cell.Terrain == TerrainType.Water ? RoadStructureType.Bridge : (cell.Terrain is TerrainType.Hills or TerrainType.Mountain ? RoadStructureType.Tunnel : RoadStructureType.Ground)).GetBaseConstructionCost():N0} (arraste para traçar)"),
+            ToolMode.BuildRail => cell.HasRail
+                ? $"({gx},{gy}) Trilho existente ({cell.RailStructure})"
+                : (cell.OccupantId != 0 || _bridge.World.OceanMask[gx, gy]
+                    ? $"({gx},{gy}) Local bloqueado"
+                    : $"({gx},{gy}) {RailStructureExtensions.FromTerrain(cell.Terrain).GetDisplayName()}: R$ {RailStructureExtensions.FromTerrain(cell.Terrain).GetRailConstructionCost():N0} (arraste para traçar)"),
+            ToolMode.BuildRailSignal => $"({gx},{gy}) Sinaleiro de Bloco: R$ {SimulationEngine.RailSignalConstructionCost:N0}",
+            ToolMode.BuildIntermodalYard => $"({gx},{gy}) Pátio Rodoferroviário Intermodal: R$ {IntermodalTerminal.ConstructionCost:N0}",
+            ToolMode.BuildGarage => $"({gx},{gy}) Garagem Regional: R$ 8.000",
+            ToolMode.BuildLogisticsHub => $"({gx},{gy}) Hub Logístico (+20% Frete): R$ 12.000",
+            ToolMode.BuildBusTerminal => $"({gx},{gy}) Rodoviária Urbana: R$ {BusTerminal.ConstructionCost:N0}",
+            ToolMode.BuildTollStation => $"({gx},{gy}) Praça de Pedágio: R$ {TollStation.ConstructionCost:N0}",
+            ToolMode.Demolish => $"({gx},{gy}) Demolir estrutura/via (+40% reembolso)",
+            _ => string.Empty
+        };
+
+        if (!string.IsNullOrEmpty(preview))
+            _topAlertLabel.Text = preview;
     }
 
     private void HandleGridCellClick(int gx, int gy, bool batchCorridor)
@@ -2987,6 +3119,12 @@ public partial class MainView : Node3D
                 break;
             }
 
+            case ToolMode.BuildRail:
+            case ToolMode.BuildRailSignal:
+            case ToolMode.BuildIntermodalYard:
+                HandleRailToolClick(gx, gy);
+                break;
+
             case ToolMode.Demolish:
             {
                 if (_bridge.TryDemolishAt(gx, gy, out var demResult, out string demMsg))
@@ -3028,6 +3166,10 @@ public partial class MainView : Node3D
                             _terrainRoot.AddChild(newTerrain);
                         }
                         RebuildRoadAndNeighbors(gx, gy);
+                    }
+                    else
+                    {
+                        HandleDemolishRailVisuals(demResult, gx, gy);
                     }
 
                     SpawnConstructionBurst(wPos);
@@ -3643,6 +3785,7 @@ public partial class MainView : Node3D
         AddPillButton(topCenterHBox, "🎥 Caminhão", CycleFollowTruckCamera);
         var photoBtn = AddPillButton(topCenterHBox, "📸 Foto", TogglePhotoMode);
         photoBtn.TooltipText = "Modo Foto & Câmera Drone Cinematográfica (Atalho: F12)";
+        AddPillButton(topCenterHBox, "🏠 Menu", EnterMainMenu);
 
         // ---------------------------------------------------------------------
         // 2. TOP-LEFT FLOATING WINDOW CARD (Header escuro + Abas + Corpo branco)
@@ -3714,6 +3857,7 @@ public partial class MainView : Node3D
         _tabButtons[WindowTab.Schedule] = AddTabButton(tabHBox, "Agenda", WindowTab.Schedule);
         _tabButtons[WindowTab.Research] = AddTabButton(tabHBox, "Pesquisa", WindowTab.Research);
         _tabButtons[WindowTab.Fleet] = AddTabButton(tabHBox, "Frota", WindowTab.Fleet);
+        _tabButtons[WindowTab.Rail] = AddTabButton(tabHBox, "Ferrovia", WindowTab.Rail);
         _tabButtons[WindowTab.Contracts] = AddTabButton(tabHBox, "Contratos", WindowTab.Contracts);
         _tabButtons[WindowTab.Operations] = AddTabButton(tabHBox, "Operações", WindowTab.Operations);
         _tabButtons[WindowTab.Bank] = AddTabButton(tabHBox, "Banco", WindowTab.Bank);
@@ -4695,6 +4839,7 @@ public partial class MainView : Node3D
         _eventLogText.AddThemeFontSizeOverride("normal_font_size", 11);
         logBox.AddChild(_eventLogText);
         bodyMargin.AddChild(logBox);
+        BuildRailTabBody(bodyMargin);
 
         // ---------------------------------------------------------------------
         // 3. BOTTOM-LEFT CORNER PILL (Saldo, Nível, Botão Abrir Janela)
@@ -4733,7 +4878,7 @@ public partial class MainView : Node3D
         });
 
         // ---------------------------------------------------------------------
-        // 4. BOTTOM-CENTER FLOATING TOOLBAR PILL (Ferramentas de Construção)
+        // 4. BOTTOM-CENTER FLOATING TOOLBAR PILL (2 Linhas Compactas Responsivas)
         // ---------------------------------------------------------------------
         var bottomCenterPill = new PanelContainer
         {
@@ -4741,41 +4886,52 @@ public partial class MainView : Node3D
             AnchorRight = 0.5f,
             AnchorTop = 1f,
             AnchorBottom = 1f,
-            OffsetLeft = -595,
-            OffsetRight = 595,
-            OffsetTop = -52,
-            OffsetBottom = -12
+            OffsetLeft = -335,
+            OffsetRight = 335,
+            OffsetTop = -84,
+            OffsetBottom = -10
         };
         bottomCenterPill.AddThemeStyleboxOverride("panel", darkPillStyle);
         _hudRegularLayer.AddChild(bottomCenterPill);
 
-        var bcHBox = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-        bcHBox.AddThemeConstantOverride("separation", 6);
-        bottomCenterPill.AddChild(bcHBox);
+        var bcCol = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        bcCol.AddThemeConstantOverride("separation", 4);
+        bottomCenterPill.AddChild(bcCol);
 
-        _toolButtons[ToolMode.Inspect] = AddPillButton(bcHBox, "🔍", () => SetActiveTool(ToolMode.Inspect));
-        _toolButtons[ToolMode.BuildRoad] = AddPillButton(bcHBox, "🌉 Via/Ponte", () => SetActiveTool(ToolMode.BuildRoad));
-        _toolButtons[ToolMode.Terraform] = AddPillButton(bcHBox, "⛏️ Terrapl.", () => SetActiveTool(ToolMode.Terraform));
+        var bcRow1 = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        bcRow1.AddThemeConstantOverride("separation", 5);
+        var bcRow2 = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        bcRow2.AddThemeConstantOverride("separation", 5);
+        bcCol.AddChild(bcRow1);
+        bcCol.AddChild(bcRow2);
+
+        _toolButtons[ToolMode.Inspect] = AddPillButton(bcRow1, "🔍 [Q]", () => SetActiveTool(ToolMode.Inspect));
+        _toolButtons[ToolMode.BuildRoad] = AddPillButton(bcRow1, "🌉 Via [B]", () => SetActiveTool(ToolMode.BuildRoad));
+        _toolButtons[ToolMode.Terraform] = AddPillButton(bcRow1, "⛏️ Terrapl.", () => SetActiveTool(ToolMode.Terraform));
         _toolButtons[ToolMode.Terraform].TooltipText = "Terraplenagem: nivela Florestas (R$ 75), Colinas (R$ 120) e Montanhas (R$ 220)";
-        _toolButtons[ToolMode.UpgradeGravel] = AddPillButton(bcHBox, "🪨 Cascalho", () => SetActiveTool(ToolMode.UpgradeGravel));
-        _toolButtons[ToolMode.UpgradeAsphalt] = AddPillButton(bcHBox, "🛣️ Asfalto", () => SetActiveTool(ToolMode.UpgradeAsphalt));
-        _toolButtons[ToolMode.UpgradeHighway] = AddPillButton(bcHBox, "⚡ Rodovia", () => SetActiveTool(ToolMode.UpgradeHighway));
-        _toolButtons[ToolMode.UpgradeDualCarriage] = AddPillButton(bcHBox, "🚧 Dupla", () => SetActiveTool(ToolMode.UpgradeDualCarriage));
-        _toolButtons[ToolMode.BuildGarage] = AddPillButton(bcHBox, "🔧 Garagem", () => SetActiveTool(ToolMode.BuildGarage));
-        _toolButtons[ToolMode.BuildLogisticsHub] = AddPillButton(bcHBox, "📦 Hub", () => SetActiveTool(ToolMode.BuildLogisticsHub));
-        _toolButtons[ToolMode.BuildBusTerminal] = AddPillButton(bcHBox, "🚌 Rodov.", () => SetActiveTool(ToolMode.BuildBusTerminal));
-        _toolButtons[ToolMode.BuildTollStation] = AddPillButton(bcHBox, "🚧 Pedágio", () => SetActiveTool(ToolMode.BuildTollStation));
-        _toolButtons[ToolMode.Demolish] = AddPillButton(bcHBox, "🚜 Demolir", () => SetActiveTool(ToolMode.Demolish));
-        _toolButtons[ToolMode.Demolish].TooltipText = "Bulldozer: demole estradas, garagens, hubs ou pedágios (+40% reembolso)";
-
-        _corridorBatchBtn = AddPillButton(bcHBox, "Lote -10%", () =>
+        _toolButtons[ToolMode.UpgradeGravel] = AddPillButton(bcRow1, "🪨 Cascalho", () => SetActiveTool(ToolMode.UpgradeGravel));
+        _toolButtons[ToolMode.UpgradeAsphalt] = AddPillButton(bcRow1, "🛣️ Asfalto", () => SetActiveTool(ToolMode.UpgradeAsphalt));
+        _toolButtons[ToolMode.UpgradeHighway] = AddPillButton(bcRow1, "⚡ Rodovia", () => SetActiveTool(ToolMode.UpgradeHighway));
+        _toolButtons[ToolMode.UpgradeDualCarriage] = AddPillButton(bcRow1, "🚧 Dupla", () => SetActiveTool(ToolMode.UpgradeDualCarriage));
+        _corridorBatchBtn = AddPillButton(bcRow1, "Lote -10%", () =>
         {
             _corridorBatchMode = !_corridorBatchMode;
             RefreshHud();
         });
 
-        AddPillButton(bcHBox, "🚛 Frota", () => OpenWindowOnTab(WindowTab.Fleet));
-        AddPillButton(bcHBox, "🏦 Banco", () => OpenWindowOnTab(WindowTab.Bank));
+        _toolButtons[ToolMode.BuildGarage] = AddPillButton(bcRow2, "🔧 Garag.", () => SetActiveTool(ToolMode.BuildGarage));
+        _toolButtons[ToolMode.BuildLogisticsHub] = AddPillButton(bcRow2, "📦 Hub", () => SetActiveTool(ToolMode.BuildLogisticsHub));
+        _toolButtons[ToolMode.BuildBusTerminal] = AddPillButton(bcRow2, "🚌 Rodov.", () => SetActiveTool(ToolMode.BuildBusTerminal));
+        _toolButtons[ToolMode.BuildTollStation] = AddPillButton(bcRow2, "🚧 Pedágio", () => SetActiveTool(ToolMode.BuildTollStation));
+        _toolButtons[ToolMode.BuildRail] = AddPillButton(bcRow2, "🚂 Trilho [R]", () => SetActiveTool(ToolMode.BuildRail));
+        _toolButtons[ToolMode.BuildRailSignal] = AddPillButton(bcRow2, "🚦 Sinal", () => SetActiveTool(ToolMode.BuildRailSignal));
+        _toolButtons[ToolMode.BuildIntermodalYard] = AddPillButton(bcRow2, "🏗️ Pátio", () => SetActiveTool(ToolMode.BuildIntermodalYard));
+        _toolButtons[ToolMode.Demolish] = AddPillButton(bcRow2, "🚜 Dem. [X]", () => SetActiveTool(ToolMode.Demolish));
+        _toolButtons[ToolMode.Demolish].TooltipText = "Bulldozer [X]: demole estradas, trilhos, sinaleiros, garagens, hubs ou pátios (+40% reembolso)";
+
+        AddPillButton(bcRow2, "🚛 Frota", () => OpenWindowOnTab(WindowTab.Fleet));
+        AddPillButton(bcRow2, "🚆 Trens", () => OpenWindowOnTab(WindowTab.Rail));
+        AddPillButton(bcRow2, "🏦 Banco", () => OpenWindowOnTab(WindowTab.Bank));
 
         // ---------------------------------------------------------------------
         // 5. BOTTOM-RIGHT CORNER PILL (Velocidade, Áudio, Data e Clima)
@@ -4885,14 +5041,15 @@ public partial class MainView : Node3D
         BuildPipWindow(_hudRegularLayer, darkPillStyle);
         BuildTutorialPanel(_hudRegularLayer, whiteToastStyle);
         BuildSavesAndSeedModal(_hudRegularLayer, windowOuterStyle);
-        BuildGraphicsSettingsModal(_hudRegularLayer, windowOuterStyle);
+        BuildMainMenuOverlay(canvas);
+        BuildGraphicsSettingsModal(canvas, windowOuterStyle);
         BuildPhotoModeBar(canvas, darkPillStyle);
 
         RebuildSchedulePools();
         OpenWindowOnTab(WindowTab.Inspector);
     }
 
-    private void BuildGraphicsSettingsModal(Control canvas, StyleBoxFlat windowOuterStyle)
+    private void BuildGraphicsSettingsModal(Node canvas, StyleBoxFlat windowOuterStyle)
     {
         _graphicsModal = new PanelContainer
         {
@@ -5584,6 +5741,7 @@ public partial class MainView : Node3D
         _tabBodySchedule.Visible = tab == WindowTab.Schedule;
         _tabBodyResearch.Visible = tab == WindowTab.Research;
         _tabBodyFleet.Visible = tab == WindowTab.Fleet;
+        _tabBodyRail.Visible = tab == WindowTab.Rail;
         _tabBodyContracts.Visible = tab == WindowTab.Contracts;
         _tabBodyOperations.Visible = tab == WindowTab.Operations;
         _tabBodyBank.Visible = tab == WindowTab.Bank;
@@ -5595,6 +5753,7 @@ public partial class MainView : Node3D
             WindowTab.Schedule => "Agenda do Veículo",
             WindowTab.Research => "Pesquisa & Tecnologia",
             WindowTab.Fleet => $"{_bridge.Engine.Player.CompanyName} (Frota: {_bridge.Engine.ActiveTrucks.Count})",
+            WindowTab.Rail => $"Ferrovia & Pátios Intermodais ({_bridge.Engine.ActiveTrains.Count} trens)",
             WindowTab.Contracts => "Contratos & Regiões",
             WindowTab.Operations => "Inteligência Operacional & Conquistas",
             WindowTab.Bank => "Banco Central & DRE",
@@ -5632,6 +5791,9 @@ public partial class MainView : Node3D
                 RefreshFleetModernizerPanel();
                 RefreshFleetActiveList();
                 break;
+            case WindowTab.Rail:
+                RefreshRailTab();
+                break;
             case WindowTab.Contracts:
                 RefreshContractsTab();
                 break;
@@ -5646,7 +5808,7 @@ public partial class MainView : Node3D
 
     private void SetActiveTool(ToolMode mode)
     {
-        if (_isDraggingRoad && mode != ToolMode.BuildRoad)
+        if (_isDraggingRoad && mode != ToolMode.BuildRoad && mode != ToolMode.BuildRail)
             CancelRoadDrag();
 
         _activeTool = mode;
@@ -5830,6 +5992,9 @@ public partial class MainView : Node3D
                     SyncLiveryEditorScopeDropdown();
                     RefreshFleetModernizerPanel();
                     RefreshFleetActiveList();
+                    break;
+                case WindowTab.Rail:
+                    RefreshRailTab();
                     break;
                 case WindowTab.Contracts:
                     RefreshContractsTab();
@@ -6120,6 +6285,14 @@ public partial class MainView : Node3D
         {
             string tag = $"[Rodoviária] {bt.Name} ({bt.WaitingPassengers} pass.)";
             _scheduleTargetPool.Add((ScheduleStopKind.BusTerminal, bt.Id, tag));
+            _scheduleTargetSelect.AddItem(tag);
+        }
+
+        foreach (var yard in _bridge.Engine.IntermodalTerminals)
+        {
+            string portTag = yard.LinkedSeaportId.HasValue ? " • 🚢 Porto" : "";
+            string tag = $"[Pátio Intermodal] {yard.Name} ({yard.TotalStoredUnits}t{portTag})";
+            _scheduleTargetPool.Add((ScheduleStopKind.IntermodalYard, yard.Id, tag));
             _scheduleTargetSelect.AddItem(tag);
         }
 
@@ -6773,6 +6946,8 @@ public partial class MainView : Node3D
                 }
             }
         }
+
+        AppendRailInspectorDetails(lines, sx, sy);
 
         _inspectorText.Text = string.Join("\n", lines);
     }

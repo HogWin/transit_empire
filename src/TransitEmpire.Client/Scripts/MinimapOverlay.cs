@@ -22,6 +22,7 @@ public partial class MinimapOverlay : Control
     private Vector2 _cameraGridPos = new(50, 50);
     private float _cameraDistance = 32f;
     private readonly List<(Vector2 GridPos, bool ManualSchedule)> _truckDots = new();
+    private readonly List<Vector2> _trainDots = new();
     private bool _isDragging = false;
     private bool _needsRedraw = true;
 
@@ -105,6 +106,13 @@ public partial class MinimapOverlay : Control
                     }
                 }
 
+                if (cell.HasRail)
+                {
+                    col = cell.HasRailSignal
+                        ? new Color("f43f5e")
+                        : (cell.RailStructure == RailStructureType.Viaduct ? new Color("93c5fd") : new Color("e2e8f0"));
+                }
+
                 img.SetPixel(x, y, col);
             }
         }
@@ -139,6 +147,11 @@ public partial class MinimapOverlay : Control
         foreach (var seaport in bridge.World.Seaports)
         {
             PaintCross(img, seaport.GridX, seaport.GridY, new Color("22d3ee"), radius: 1);
+        }
+
+        foreach (var yard in bridge.Engine.IntermodalTerminals)
+        {
+            PaintCross(img, yard.GridX, yard.GridY, new Color("fb923c"), radius: 1);
         }
 
         foreach (var lm in bridge.World.Landmarks)
@@ -180,18 +193,36 @@ public partial class MinimapOverlay : Control
         return cell.Terrain == TerrainType.Hills ? new Color("3d7a36") : new Color("53a348");
     }
 
-    public void UpdateDynamicMarkers(Vector2 cameraGridPos, float cameraDistance, IReadOnlyList<(Vector2 GridPos, bool Manual)> trucks)
+    public void UpdateDynamicMarkers(
+        Vector2 cameraGridPos,
+        float cameraDistance,
+        IReadOnlyList<(Vector2 GridPos, bool Manual)> trucks,
+        IReadOnlyList<Vector2>? trains = null)
     {
+        int trainCount = trains?.Count ?? 0;
         bool changed = _needsRedraw
             || _cameraGridPos.DistanceSquaredTo(cameraGridPos) > 0.0025f
             || MathF.Abs(_cameraDistance - cameraDistance) > 0.05f
-            || _truckDots.Count != trucks.Count;
+            || _truckDots.Count != trucks.Count
+            || _trainDots.Count != trainCount;
 
         if (!changed)
         {
             for (int i = 0; i < trucks.Count; i++)
             {
                 if (_truckDots[i].GridPos.DistanceSquaredTo(trucks[i].GridPos) > 0.0025f || _truckDots[i].ManualSchedule != trucks[i].Manual)
+                {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!changed && trains != null)
+        {
+            for (int i = 0; i < trainCount; i++)
+            {
+                if (_trainDots[i].DistanceSquaredTo(trains[i]) > 0.0025f)
                 {
                     changed = true;
                     break;
@@ -208,6 +239,12 @@ public partial class MinimapOverlay : Control
         _truckDots.Clear();
         for (int i = 0; i < trucks.Count; i++)
             _truckDots.Add(trucks[i]);
+        _trainDots.Clear();
+        if (trains != null)
+        {
+            for (int i = 0; i < trainCount; i++)
+                _trainDots.Add(trains[i]);
+        }
         QueueRedraw();
     }
 
@@ -230,6 +267,14 @@ public partial class MinimapOverlay : Control
             Vector2 pt = new(gp.X * scaleX, gp.Y * scaleY);
             DrawCircle(pt, 3.2f, new Color("0f172a"));
             DrawCircle(pt, 2.2f, manual ? new Color("facc15") : new Color("22d3ee"));
+        }
+
+        // Pontos dos trens ferroviários ativos
+        foreach (var tg in _trainDots)
+        {
+            Vector2 pt = new(tg.X * scaleX, tg.Y * scaleY);
+            DrawCircle(pt, 3.8f, new Color("0f172a"));
+            DrawCircle(pt, 2.7f, new Color("f97316"));
         }
 
         // Retângulo de foco da câmera

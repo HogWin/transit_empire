@@ -25,6 +25,8 @@ public sealed class ClientSettingsData
     public bool AutoSaveEnabled { get; set; } = true;
     public int PreferredMapSize { get; set; } = 100;
     public string PreferredScenario { get; set; } = "Balanced";
+    public bool PreferredHasRivers { get; set; } = true;
+    public string PreferredMountains { get; set; } = "Normal";
     public bool TutorialCompleted { get; set; } = false;
     public bool TutorialHidden { get; set; } = false;
 }

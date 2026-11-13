@@ -11,7 +11,8 @@ public enum ScheduleStopKind
     Garage,
     Seaport,
     RegionalLandmark,
-    BusTerminal
+    BusTerminal,
+    IntermodalYard
 }
 
 /// <summary>

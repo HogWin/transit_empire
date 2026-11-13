@@ -12,9 +12,17 @@ public struct GridCell
     public RoadTier RoadLevel;
     public int OccupantId; // ID da Cidade, Indústria, Armazém ou Garagem (0 = Vazio)
     public int RivalOwnerId; // > 0 quando o trecho viário pertence a uma transportadora rival
+    public bool HasRail;
+    public bool HasRailSignal;
 
     public bool HasRoad => RoadLevel != RoadTier.None;
-    public bool IsBuildable => Terrain == TerrainType.Plains && OccupantId == 0 && !HasRoad;
+    public bool IsBuildable => Terrain == TerrainType.Plains && OccupantId == 0 && !HasRoad && !HasRail;
+
+    public RailStructureType RailStructure => !HasRail
+        ? RailStructureType.Ground
+        : Terrain == TerrainType.Water
+            ? RailStructureType.Viaduct
+            : (Terrain is TerrainType.Hills or TerrainType.Mountain ? RailStructureType.Tunnel : RailStructureType.Ground);
 
     public RoadStructureType StructureType => !HasRoad
         ? RoadStructureType.Ground
